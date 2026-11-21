@@ -7,7 +7,6 @@ import SwiftUI
 final class EditorModel: ObservableObject {
     @Published var alarm: Alarm
     @Published var kind: AlarmKind?          // nothing chosen yet for a new alarm
-    @Published var previewing = false
     @Published var confirmingDelete = false
     var choosingFile = false                 // the file chooser is open; don't close on outside clicks
     let isNew: Bool
@@ -102,15 +101,7 @@ struct EditorView: View {
                             }
                             .labelsHidden()
                             .fixedSize()
-
-                            Button(action: togglePreview) {
-                                if model.previewing {
-                                    Label("Stop", systemImage: "stop.fill")
-                                } else {
-                                    Label("Preview", systemImage: "play.fill")
-                                }
-                            }
-                            .disabled(!model.previewing && !model.hasSoundToPlay)
+                            .padding(.trailing, -3)   // line the arrows up with the controls above and below
                         }
                     }
 
@@ -201,6 +192,7 @@ struct EditorView: View {
             set: { newValue in
                 guard newValue == SoundLibrary.addFileTag else {
                     model.alarm.sound = newValue
+                    playSample()
                     return
                 }
                 // Keep the current sound showing while the file chooser is open.
@@ -213,23 +205,29 @@ struct EditorView: View {
                     if let id {
                         customSounds = SoundLibrary.custom()
                         model.alarm.sound = id
+                        playSample()
                     }
                 }
             }
         )
     }
 
-    private func togglePreview() {
-        if model.previewing {
+    /// Plays the chosen sound right away, the way the alarm is set to play it.
+    /// While Play sound or Volume are still 0, it plays once at half volume so you can hear it.
+    private func playSample() {
+        guard !model.alarm.sound.isEmpty else {
             Ringer.shared.stopPreview()
-            model.previewing = false
             return
         }
-        model.previewing = true
-        let previewModel = model
-        Ringer.shared.preview(model.alarm) {
-            previewModel.previewing = false
+        var sample = model.alarm
+        if sample.plays <= 0 {
+            sample.plays = 1
+            sample.playUnit = .times
         }
+        if sample.volume <= 0 {
+            sample.volume = 0.5
+        }
+        Ringer.shared.preview(sample) {}
     }
 }
 
@@ -311,7 +309,7 @@ final class EditorPanel: NSPanel {
         hidesOnDeactivate = false
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        hasShadow = UserDefaults.standard.integer(forKey: "DingPanelStyle") != 1   // corner test
         isMovable = false
         isReleasedWhenClosed = false
         collectionBehavior = [.moveToActiveSpace, .transient, .ignoresCycle, .fullScreenAuxiliary]
@@ -358,10 +356,23 @@ final class EditorController: NSObject {
 
     /// The same glass as the menu (macOS 26 and later), or the menu material on older systems.
     private static func background(around content: NSView) -> NSView {
-        if #available(macOS 26.0, *) {
+        let style = UserDefaults.standard.integer(forKey: "DingPanelStyle")   // corner test: 0 as before
+        if #available(macOS 26.0, *), style != 3 {
             let glass = NSGlassEffectView()
             glass.cornerRadius = 12
             glass.contentView = content
+            if style == 2 || style == 4 {
+                // Clip everything, glass included, to the rounded shape.
+                let clip = NSView()
+                clip.wantsLayer = true
+                clip.layer?.cornerRadius = 12
+                clip.layer?.cornerCurve = .continuous
+                clip.layer?.masksToBounds = true
+                glass.frame = clip.bounds
+                glass.autoresizingMask = [.width, .height]
+                clip.addSubview(glass)
+                return clip
+            }
             return glass
         }
         let effect = NSVisualEffectView()
@@ -406,6 +417,7 @@ final class EditorController: NSObject {
         panel.makeKeyAndOrderFront(nil)
         panel.invalidateShadow()
         DispatchQueue.main.async { [weak self] in self?.panel.invalidateShadow() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.panel.invalidateShadow() }
         if !model.isNew {
             // Opening an existing alarm shouldn't select its name, so a stray key press can't replace it.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
