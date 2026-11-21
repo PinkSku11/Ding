@@ -43,6 +43,7 @@ enum MenuMetrics {
     static let width: CGFloat = 352      // the menu stretches rows to its full width
     static let cardInset: CGFloat = 16   // equal space on both sides; right edge meets the dividers
     static let textInset: CGFloat = 30   // same column as the menu's other text
+    static let labelX: CGFloat = textInset - 2   // a text label draws its text 2 pt in from its frame
 }
 
 // MARK: - "Alarms" heading with a + button on the right, in line with the switches
@@ -56,7 +57,7 @@ final class AlarmsHeaderView: NSView {
         let label = NSTextField(labelWithString: "Alarms")
         label.font = .systemFont(ofSize: 11, weight: .semibold)
         label.textColor = .tertiaryLabelColor
-        label.frame = NSRect(x: MenuMetrics.textInset, y: 4, width: 200, height: 14)
+        label.frame = NSRect(x: MenuMetrics.labelX, y: 4, width: 200, height: 14)
         addSubview(label)
 
         let plus = PlusButton(action: onAdd)
@@ -180,11 +181,11 @@ final class AlarmRowView: NSView {
         toggle.autoresizingMask = [.minXMargin]
         addSubview(toggle)
 
-        let textWidth = toggle.frame.minX - 12 - AlarmRowView.textInset
+        let textWidth = toggle.frame.minX - 12 - MenuMetrics.labelX
         nameLabel.stringValue = alarm.displayName
         nameLabel.font = .menuFont(ofSize: 13)
         nameLabel.lineBreakMode = .byTruncatingTail
-        nameLabel.frame = NSRect(x: AlarmRowView.textInset, y: 28, width: textWidth, height: 17)
+        nameLabel.frame = NSRect(x: MenuMetrics.labelX, y: 28, width: textWidth, height: 17)
         nameLabel.autoresizingMask = [.width]
         addSubview(nameLabel)
 
@@ -192,7 +193,7 @@ final class AlarmRowView: NSView {
         detailLabel.font = .systemFont(ofSize: 11)
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.lineBreakMode = .byTruncatingTail
-        detailLabel.frame = NSRect(x: AlarmRowView.textInset, y: 11, width: textWidth, height: 15)
+        detailLabel.frame = NSRect(x: MenuMetrics.labelX, y: 11, width: textWidth, height: 15)
         detailLabel.autoresizingMask = [.width]
         addSubview(detailLabel)
 

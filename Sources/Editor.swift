@@ -64,6 +64,7 @@ struct EditorView: View {
                                 }
                                 .labelsHidden()
                                 .fixedSize()
+                                .padding(.trailing, -3)   // line the arrows up with the controls above and below
                             }
                         }
                     } else if model.kind == .once {
@@ -113,6 +114,7 @@ struct EditorView: View {
                             }
                             .labelsHidden()
                             .fixedSize()
+                            .padding(.trailing, -3)
                         }
                     }
 
@@ -149,7 +151,7 @@ struct EditorView: View {
                     .disabled(!model.canSave)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 4)
+            .padding(.top, 0)
             .padding(.bottom, 18)
         }
         .frame(width: 520)
@@ -158,8 +160,8 @@ struct EditorView: View {
     private var formHeight: CGFloat {
         switch model.kind {
         case .some(.repeating): return 450
-        case .some(.once): return 370
-        case .none: return 330
+        case .some(.once): return 368
+        case .none: return 328
         }
     }
 
@@ -326,6 +328,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
             guard response == .alertFirstButtonReturn else { return }
             AlarmStore.shared.delete(id)
             self?.close()
+        }
+    }
+
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        guard !model.isNew else { return }   // a new alarm starts with the cursor in Name
+        // Opening an existing alarm shouldn't select its name, so a stray key press can't replace it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.window?.makeFirstResponder(nil)
         }
     }
 
