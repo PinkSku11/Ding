@@ -301,8 +301,9 @@ final class EditorPanel: NSPanel {
     var onEscape: (() -> Void)?
 
     init() {
+        // Non-activating, like Spotlight: it takes clicks and typing while the app you were in stays active.
         super.init(contentRect: NSRect(x: 0, y: 0, width: 520, height: 400),
-                   styleMask: [.borderless],
+                   styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered,
                    defer: false)
         isFloatingPanel = true
@@ -335,7 +336,7 @@ final class EditorController: NSObject {
     private var hosting: NSHostingView<EditorView>!
     private var anchorTop: CGFloat = 0
     private var mouseMonitor: Any?
-    private var resignObserver: NSObjectProtocol?
+    private var appSwitchObserver: NSObjectProtocol?
     private var kindWatcher: AnyCancellable?
 
     init(alarm: Alarm, isNew: Bool) {
@@ -402,7 +403,6 @@ final class EditorController: NSObject {
             previousApp = front
         }
         watchForOutsideClicks()
-        NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
         panel.invalidateShadow()
         DispatchQueue.main.async { [weak self] in self?.panel.invalidateShadow() }
@@ -430,14 +430,15 @@ final class EditorController: NSObject {
         panel.invalidateShadow()
     }
 
-    /// Like the menu: a click anywhere else, or switching to another app, closes it.
+    /// Like the menu: a click in any other app (or the desktop), or switching to another app, closes it.
     private func watchForOutsideClicks() {
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
             self?.closeFromOutside()
         }
-        resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
-                                                                object: nil, queue: .main) { [weak self] _ in
-            self?.closeFromOutside()
+        appSwitchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            if app != NSRunningApplication.current { self?.closeFromOutside() }
         }
     }
 
@@ -446,9 +447,9 @@ final class EditorController: NSObject {
             NSEvent.removeMonitor(monitor)
             mouseMonitor = nil
         }
-        if let observer = resignObserver {
-            NotificationCenter.default.removeObserver(observer)
-            resignObserver = nil
+        if let observer = appSwitchObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            appSwitchObserver = nil
         }
     }
 
@@ -463,14 +464,9 @@ final class EditorController: NSObject {
         stopWatching()
         Ringer.shared.stopPreview()
         panel.orderOut(nil)
-        // Give the keyboard back to the app you were using, the way a menu does.
-        // (Hiding Ding for this, as before, left the next editor vanishing on the first click.)
-        if restoreFocus && NSApp.isActive {
-            if UserDefaults.standard.bool(forKey: "DingOldHide") {   // build machine's before/after test only
-                NSApp.hide(nil)
-            } else if let app = previousApp, !app.isTerminated {
-                app.activate(options: [])
-            }
+        // Ding only becomes the active app if you used the file chooser; then hand the keyboard back.
+        if restoreFocus && NSApp.isActive, let app = previousApp, !app.isTerminated {
+            app.activate(options: [])
         }
         onFinish?()
     }

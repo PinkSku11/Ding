@@ -41,13 +41,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 switch show {
                 case "menu": self?.openAlarmMenu()
                 case "options": self?.openMenu(self?.buildOptionsMenu())
-                case "editor-cycle":   // open, close like Cancel, open again
+                case "editor-cycle":   // another app in front; open, close like Cancel, open again
                     let first = AlarmStore.shared.alarms.first?.id
-                    self?.openEditor(first)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        self?.editor?.close()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            self?.openEditor(first)
+                    NSWorkspace.shared.runningApplications
+                        .first { $0.bundleIdentifier == "com.apple.finder" }?
+                        .activate(options: [])
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        self?.openEditor(first)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            self?.editor?.close()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                self?.openEditor(first)
+                            }
                         }
                     }
                 case "menu-plus":

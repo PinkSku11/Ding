@@ -105,23 +105,22 @@ shoot menu menu-light || TEST_OK=0
 shoot options options dark || TEST_OK=0
 
 echo
-echo "== Click test: open the editor, close it, open it again, then click inside it"
-click_test() {   # $1: name, then extra launch arguments
-    NAME="$1"; shift
-    pkill -x Ding 2>/dev/null
-    sleep 1
-    open -n "$APP" --args -DingShow editor-cycle "$@"
-    sleep 8
-    screencapture -x "$OUT/$NAME-before.png"
-    python3 ci/click.py 917 138          # the "Once a day" button in the editor
-    sleep 2
-    screencapture -x "$OUT/$NAME-after.png"
-    pgrep -x Ding >/dev/null || echo "Ding stopped running in $NAME"
-    pkill -x Ding
-    sleep 1
-}
-click_test click-old -DingOldHide YES
-click_test click-new
+echo "== Click test: another app in front; open the editor, close it, open it again, then use it"
+pkill -x Ding 2>/dev/null
+sleep 1
+open -n "$APP" --args -DingShow editor-cycle
+sleep 9
+FRONT=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null)
+echo "Front app while the editor is open: $FRONT"
+screencapture -x "$OUT/click-before.png"
+python3 ci/click.py click 980 101       # end of the alarm's name
+python3 ci/click.py type " test"
+python3 ci/click.py click 917 138       # the "Once a day" button
+sleep 2
+screencapture -x "$OUT/click-after.png"
+pgrep -x Ding >/dev/null || echo "Ding stopped running in the click test"
+pkill -x Ding
+sleep 1
 
 rm -f "$SUPPORT/alarms.json"
 shoot menu empty dark || TEST_OK=0
