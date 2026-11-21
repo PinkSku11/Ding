@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // "Keep Mac awake" and "Open at login" both start off.
             Settings.launchedBefore = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-                self?.openMenu()
+                self?.openAlarmMenu()
             }
         }
 
@@ -38,7 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let show = UserDefaults.standard.string(forKey: "DingShow") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                 switch show {
-                case "menu": self?.openMenu()
+                case "menu": self?.openAlarmMenu()
+                case "options": self?.openMenu(self?.buildOptionsMenu())
                 case "editor": self?.openEditor(AlarmStore.shared.alarms.first?.id)
                 case "new": self?.openEditor(nil)
                 default: break
@@ -50,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Opening Ding again (from Spotlight, Finder or Launchpad) shows the alarm list next to the pointer,
     /// so it's always reachable even if the bell is hidden behind the notch.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        buildMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        buildAlarmMenu(includeOptions: true).popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         return false
     }
 
@@ -68,17 +69,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// A click on the bell stops a ringing alarm; otherwise it opens the alarm list.
+    /// A click on the bell stops a ringing alarm. Otherwise a click opens the alarm list,
+    /// and a right click (or Control-click) opens the options.
     @objc private func statusItemClicked(_ sender: Any?) {
         if Ringer.shared.isRinging {
             Ringer.shared.stopAll()
             return
         }
-        openMenu()
+        let event = NSApp.currentEvent
+        let rightClick = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
+        if rightClick {
+            openMenu(buildOptionsMenu())
+        } else {
+            openAlarmMenu()
+        }
     }
 
-    private func openMenu() {
-        let menu = buildMenu()
+    private func openAlarmMenu() {
+        openMenu(buildAlarmMenu())
+    }
+
+    private func openMenu(_ menu: NSMenu?) {
+        guard let menu else { return }
         menu.delegate = self
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
@@ -92,12 +104,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Menu
 
-    private func buildMenu() -> NSMenu {
+    private func newMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         if UserDefaults.standard.bool(forKey: "DingDark") {   // build machine screenshots only
             menu.appearance = NSAppearance(named: .darkAqua)
         }
+        return menu
+    }
+
+    /// Right click: the options and Quit.
+    private func buildOptionsMenu() -> NSMenu {
+        let menu = newMenu()
+        addOptions(to: menu)
+        return menu
+    }
+
+    /// Click: the alarm list.
+    private func buildAlarmMenu(includeOptions: Bool = false) -> NSMenu {
+        let menu = newMenu()
         let alarms = sortedAlarms()
 
         if alarms.isEmpty {
@@ -134,8 +159,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
-        menu.addItem(.separator())
+        if includeOptions {
+            menu.addItem(.separator())
+            addOptions(to: menu)
+        }
+        return menu
+    }
 
+    private func addOptions(to menu: NSMenu) {
         let awake = NSMenuItem(title: "Keep Mac awake for alarms", action: #selector(toggleKeepAwake), keyEquivalent: "")
         awake.target = self
         awake.state = Settings.keepAwake ? .on : .off
@@ -149,8 +180,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let quit = NSMenuItem(title: "Quit Ding", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         quit.target = NSApp
         menu.addItem(quit)
-
-        return menu
     }
 
     /// Soonest ring first; alarms that are off go to the bottom.

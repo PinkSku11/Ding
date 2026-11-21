@@ -101,6 +101,7 @@ shoot menu menu dark || TEST_OK=0
 shoot editor editor dark || TEST_OK=0
 shoot new new-alarm dark || TEST_OK=0
 shoot menu menu-light || TEST_OK=0
+shoot options options dark || TEST_OK=0
 rm -f "$SUPPORT/alarms.json"
 shoot menu empty dark || TEST_OK=0
 [ "$TEST_OK" = 1 ] || fail "test run"
