@@ -79,9 +79,9 @@ final class PlusButton: NSView {
 
     init(action: @escaping () -> Void) {
         self.action = action
-        super.init(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+        super.init(frame: NSRect(x: 0, y: 0, width: 30, height: 20))
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = 6          // a rounded rectangle, like the cards
 
         let icon = NSImageView(frame: bounds)
         icon.image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)?
