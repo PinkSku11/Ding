@@ -37,13 +37,111 @@ enum StatusIcon {
     }
 }
 
+// MARK: - Shared measurements, so everything in the menu lines up
+
+enum MenuMetrics {
+    static let width: CGFloat = 352      // the menu stretches rows to its full width
+    static let cardInset: CGFloat = 16   // equal space on both sides; right edge meets the dividers
+    static let textInset: CGFloat = 30   // same column as the menu's other text
+}
+
+// MARK: - "Alarms" heading with a + button on the right, in line with the switches
+
+final class AlarmsHeaderView: NSView {
+    init(onAdd: @escaping () -> Void) {
+        let width = MenuMetrics.width
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 24))
+        autoresizingMask = [.width]
+
+        let label = NSTextField(labelWithString: "Alarms")
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .tertiaryLabelColor
+        label.frame = NSRect(x: MenuMetrics.textInset, y: 4, width: 200, height: 14)
+        addSubview(label)
+
+        let plus = PlusButton(action: onAdd)
+        plus.setFrameOrigin(NSPoint(x: width - MenuMetrics.textInset - plus.frame.width, y: 1))
+        plus.autoresizingMask = [.minXMargin]
+        addSubview(plus)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+}
+
+final class PlusButton: NSView {
+    private let action: () -> Void
+    private var trackingArea: NSTrackingArea?
+    private var hovering = false {
+        didSet { updateColor() }
+    }
+
+    init(action: @escaping () -> Void) {
+        self.action = action
+        super.init(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+        wantsLayer = true
+        layer?.cornerRadius = 10
+
+        let icon = NSImageView(frame: bounds)
+        icon.image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
+        icon.contentTintColor = .secondaryLabelColor
+        icon.imageScaling = .scaleNone
+        addSubview(icon)
+
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("New alarm")
+        updateColor()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    private func updateColor() {
+        let alpha: CGFloat = hovering ? 0.18 : 0.09
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(alpha).cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColor()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let old = trackingArea { removeTrackingArea(old) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self,
+                                  userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.insetBy(dx: -4, dy: -4).contains(point) {
+            action()
+        }
+    }
+}
+
 // MARK: - One alarm in the menu: its own bubble, with a switch on the right
 
 final class AlarmRowView: NSView {
-    private static let width: CGFloat = 352      // the menu stretches rows to its full width
+    private static let width = MenuMetrics.width
     private static let height: CGFloat = 54
-    private static let cardInset: CGFloat = 16    // equal space on both sides; right edge meets the dividers
-    private static let textInset: CGFloat = 30    // same column as the menu's other text
+    private static let cardInset = MenuMetrics.cardInset
+    private static let textInset = MenuMetrics.textInset
 
     private let bubble = NSView()
     private let nameLabel = NSTextField(labelWithString: "")

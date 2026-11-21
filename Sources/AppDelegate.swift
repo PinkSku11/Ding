@@ -112,7 +112,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             header.isEnabled = false
             menu.addItem(header)
             menu.addItem(.separator())
-            menu.addItem(NSMenuItem.sectionHeader(title: "Alarms"))
+            let alarmsHeader = NSMenuItem()
+            alarmsHeader.view = AlarmsHeaderView { [weak self, weak menu] in
+                menu?.cancelTracking()
+                DispatchQueue.main.async { self?.openEditor(nil) }
+            }
+            menu.addItem(alarmsHeader)
 
             for alarm in alarms {
                 let id = alarm.id
@@ -127,11 +132,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     })
                 menu.addItem(item)
             }
-
-            menu.addItem(.separator())
-            let add = NSMenuItem(title: "New alarm…", action: #selector(newAlarm), keyEquivalent: "")
-            add.target = self
-            menu.addItem(add)
         }
 
         menu.addItem(.separator())
@@ -167,10 +167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func nextText() -> String {
         guard let soonest = Engine.shared.soonest() else { return "No alarms are on" }
         return "Next: \(soonest.alarm.displayName) \(Format.when(soonest.time))"
-    }
-
-    @objc private func newAlarm() {
-        openEditor(nil)
     }
 
     @objc private func toggleKeepAwake() {
