@@ -66,10 +66,14 @@ mkdir -p "$SUPPORT"
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 defaults write com.shriya.Ding launchedBefore -bool true
 
-shoot() {   # $1: what Ding should show, $2: screenshot name
+shoot() {   # $1: what Ding should show, $2: screenshot name, $3: "dark" for dark mode
     pkill -x Ding 2>/dev/null
     sleep 1
-    open -n "$APP" --args -DingShow "$1"
+    if [ "${3:-}" = dark ]; then
+        open -n "$APP" --args -DingShow "$1" -DingDark YES
+    else
+        open -n "$APP" --args -DingShow "$1"
+    fi
     sleep 8
     if ! pgrep -x Ding >/dev/null; then
         echo "Ding stopped running while showing: $1"
@@ -81,17 +85,43 @@ shoot() {   # $1: what Ding should show, $2: screenshot name
     screencapture -x "$OUT/$2.png" || echo "(screenshot failed for $2)"
     pkill -x Ding
     sleep 1
-    echo "OK: $1"
+    echo "OK: $2"
     return 0
 }
 
 TEST_OK=1
-shoot menu menu || TEST_OK=0
-shoot editor editor || TEST_OK=0
-shoot new new-alarm || TEST_OK=0
+shoot menu menu dark || TEST_OK=0
+shoot editor editor dark || TEST_OK=0
+shoot new new-alarm dark || TEST_OK=0
+shoot menu menu-light || TEST_OK=0
 rm -f "$SUPPORT/alarms.json"
-shoot menu empty || TEST_OK=0
+shoot menu empty dark || TEST_OK=0
 [ "$TEST_OK" = 1 ] || fail "test run"
+
+echo
+echo "== Ring test: an alarm set two minutes ahead should ring on time"
+EPOCH=$(date +%s)
+NOW_H=$(date -r "$EPOCH" +%H)
+NOW_M=$(date -r "$EPOCH" +%M)
+NOW_S=$(date -r "$EPOCH" +%S)
+RING_MIN=$(( (10#$NOW_H * 60 + 10#$NOW_M + 2) % 1440 ))
+TARGET=$(( EPOCH - 10#$NOW_S + 123 ))   # 3 seconds after the alarm is due
+cat > "$SUPPORT/alarms.json" <<JSON
+[{"id": "6F1C1D2E-0000-4000-8000-0000000000AA", "name": "Test ring", "isOn": true, "kind": "once",
+  "fromMinute": 540, "untilMinute": 1380, "every": 15, "everyUnit": "minutes", "timeMinute": $RING_MIN,
+  "days": [1, 2, 3, 4, 5, 6, 7], "sound": "Glass", "plays": 10, "playUnit": "seconds", "volume": 0.5,
+  "ringWhenMuted": true}]
+JSON
+pkill -x Ding 2>/dev/null
+sleep 1
+open -n "$APP"
+echo "Alarm due at minute $RING_MIN of the day; waiting..."
+sleep $(( TARGET - $(date +%s) ))
+screencapture -x "$OUT/ringing.png" || echo "(screenshot failed for ringing)"
+pgrep -x Ding >/dev/null || fail "Ding stopped running during the ring test"
+pkill -x Ding
+rm -f "$SUPPORT/alarms.json"
+echo "OK: ringing"
 
 echo
 echo "== Making Ding.dmg"

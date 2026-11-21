@@ -46,7 +46,7 @@ final class AlarmRowView: NSView {
     private let bubble = NSView()
     private let nameLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(labelWithString: "")
-    private let toggle = NSSwitch()
+    private let toggle: MenuSwitch
     private var trackingArea: NSTrackingArea?
     private var hovering = false {
         didSet { updateBubble() }
@@ -57,6 +57,7 @@ final class AlarmRowView: NSView {
     init(alarm: Alarm, detail: String, onToggle: @escaping (Bool) -> Void, onOpen: @escaping () -> Void) {
         self.onToggle = onToggle
         self.onOpen = onOpen
+        toggle = MenuSwitch(isOn: alarm.isOn)
         super.init(frame: NSRect(x: 0, y: 0, width: AlarmRowView.width, height: AlarmRowView.height))
 
         bubble.wantsLayer = true
@@ -64,12 +65,9 @@ final class AlarmRowView: NSView {
         bubble.frame = NSRect(x: 8, y: 3, width: AlarmRowView.width - 16, height: AlarmRowView.height - 6)
         addSubview(bubble)
 
-        toggle.controlSize = .small
-        toggle.state = alarm.isOn ? .on : .off
-        toggle.target = self
-        toggle.action = #selector(switched)
         toggle.setAccessibilityLabel(alarm.displayName)
-        let size = toggle.fittingSize
+        toggle.onChange = { [weak self] on in self?.switched(on) }
+        let size = MenuSwitch.size
         toggle.frame = NSRect(x: AlarmRowView.width - 22 - size.width,
                               y: (AlarmRowView.height - size.height) / 2,
                               width: size.width,
@@ -114,8 +112,7 @@ final class AlarmRowView: NSView {
         updateBubble()
     }
 
-    @objc private func switched() {
-        let on = toggle.state == .on
+    private func switched(_ on: Bool) {
         updateName(on: on)
         onToggle(on)
     }
@@ -169,13 +166,8 @@ final class EmptyStateView: NSView {
         title.frame = NSRect(x: 0, y: 62, width: width, height: 20)
         addSubview(title)
 
-        let button = NSButton(title: "New alarm", target: self, action: #selector(newAlarm))
-        button.bezelColor = .controlAccentColor
-        button.sizeToFit()
-        button.frame = NSRect(x: (width - button.frame.width - 16) / 2,
-                              y: 18,
-                              width: button.frame.width + 16,
-                              height: button.frame.height)
+        let button = AccentButton(title: "New alarm") { [weak self] in self?.onNew() }
+        button.setFrameOrigin(NSPoint(x: (width - button.frame.width) / 2, y: 16))
         addSubview(button)
 
         updateCircle()
@@ -195,8 +187,142 @@ final class EmptyStateView: NSView {
         super.viewDidChangeEffectiveAppearance()
         updateCircle()
     }
+}
 
-    @objc private func newAlarm() {
-        onNew()
+// MARK: - Switch for the alarm rows
+// Draws itself, so "on" always shows your accent color. (A standard switch turns grey in a menu,
+// because menus never become the active window.)
+
+final class MenuSwitch: NSView {
+    static let size = NSSize(width: 44, height: 22)
+
+    private(set) var isOn: Bool
+    var onChange: ((Bool) -> Void)?
+    private let track = CALayer()
+    private let knob = CALayer()
+
+    init(isOn: Bool) {
+        self.isOn = isOn
+        super.init(frame: NSRect(origin: .zero, size: MenuSwitch.size))
+        wantsLayer = true
+        layer?.addSublayer(track)
+        layer?.addSublayer(knob)
+        knob.backgroundColor = NSColor.white.cgColor
+        knob.shadowColor = NSColor.black.cgColor
+        knob.shadowOpacity = 0.25
+        knob.shadowRadius = 1.5
+        knob.shadowOffset = CGSize(width: 0, height: -0.5)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.checkBox)
+        update(animated: false)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    private func update(animated: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(!animated)
+        CATransaction.setAnimationDuration(0.18)
+        let b = bounds
+        track.frame = b
+        track.cornerRadius = b.height / 2
+        let inset: CGFloat = 2
+        let knobHeight = b.height - inset * 2
+        let knobWidth = knobHeight + 8          // a pill, like the Mac's own switches
+        knob.bounds = CGRect(x: 0, y: 0, width: knobWidth, height: knobHeight)
+        knob.cornerRadius = knobHeight / 2
+        knob.position = CGPoint(x: isOn ? b.width - inset - knobWidth / 2 : inset + knobWidth / 2, y: b.midY)
+        let on = isOn
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let color = on ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.2)
+            self.track.backgroundColor = color.cgColor
+        }
+        CATransaction.commit()
+        setAccessibilityValue(on)
+    }
+
+    override func layout() {
+        super.layout()
+        update(animated: false)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        update(animated: false)
+    }
+
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.insetBy(dx: -6, dy: -6).contains(point) else { return }
+        isOn.toggle()
+        update(animated: true)
+        onChange?(isOn)
+    }
+}
+
+// MARK: - Blue pill button for the empty menu
+
+final class AccentButton: NSView {
+    private let label = NSTextField(labelWithString: "")
+    private let action: () -> Void
+    private var pressed = false {
+        didSet { updateColor() }
+    }
+
+    init(title: String, action: @escaping () -> Void) {
+        self.action = action
+        super.init(frame: .zero)
+        wantsLayer = true
+        label.stringValue = title
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .white
+        label.alignment = .center
+        label.sizeToFit()
+        let size = NSSize(width: ceil(label.frame.width) + 36, height: 28)
+        setFrameSize(size)
+        layer?.cornerRadius = size.height / 2
+        label.frame = NSRect(x: 0,
+                             y: ((size.height - label.frame.height) / 2).rounded(),
+                             width: size.width,
+                             height: label.frame.height)
+        addSubview(label)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(title)
+        updateColor()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    private func updateColor() {
+        let down = pressed
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let base = NSColor.controlAccentColor
+            let fill = down ? (base.blended(withFraction: 0.2, of: .black) ?? base) : base
+            self.layer?.backgroundColor = fill.cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColor()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        pressed = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        pressed = false
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.contains(point) {
+            action()
+        }
     }
 }

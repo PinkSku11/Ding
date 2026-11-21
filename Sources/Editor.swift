@@ -118,7 +118,7 @@ struct EditorView: View {
                 }
             }
             .formStyle(.grouped)
-            .frame(height: model.alarm.kind == .repeating ? 470 : 396)
+            .frame(height: model.alarm.kind == .repeating ? 450 : 370)
 
             HStack(spacing: 8) {
                 Spacer()
@@ -260,6 +260,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         let hosting = NSHostingController(rootView: view)
         hosting.sizingOptions = [.preferredContentSize]
         window.contentViewController = hosting
+        window.setContentSize(hosting.view.fittingSize)
         window.delegate = self
         window.center()
     }
