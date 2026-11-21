@@ -167,25 +167,17 @@ rm -f "$SUPPORT/alarms.json"
 echo "OK: ringing"
 
 echo
-echo "== Corner test: the editor over a blue desktop, drawn several ways"
+echo "== Over a blue desktop: the editor and the menu"
 python3 ci/solid-png.py /tmp/ding-blue.png 1024 768 74 106 222
 osascript -e 'tell application "System Events" to tell every desktop to set picture to POSIX file "/tmp/ding-blue.png"' \
     || echo "(could not set the desktop picture)"
 sleep 2
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
-for STYLE in 0 1 2 3 4; do
-    pkill -x Ding 2>/dev/null
-    sleep 1
-    open -n "$APP" --args -DingShow editor -DingPanelStyle "$STYLE"
-    sleep 7
-    screencapture -x "$OUT/corners-$STYLE.png"
-done
-pkill -x Ding
-open -n "$APP" --args -DingShow menu
-sleep 5
-screencapture -x "$OUT/corners-menu.png"
-pkill -x Ding
+shoot editor blue-editor dark || TEST_OK=0
+shoot new blue-new dark || TEST_OK=0
+shoot menu blue-menu dark || TEST_OK=0
 rm -f "$SUPPORT/alarms.json"
+[ "$TEST_OK" = 1 ] || fail "test run"
 
 echo
 echo "== Making Ding.dmg"

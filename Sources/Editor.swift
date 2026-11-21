@@ -54,11 +54,9 @@ struct EditorView: View {
                 Section {
                     TextField("Name", text: $model.alarm.name, prompt: Text("Alarm"))
 
-                    Picker("Rings", selection: $model.kind) {
-                        Text("Several times a day").tag(AlarmKind?.some(.repeating))
-                        Text("Once a day").tag(AlarmKind?.some(.once))
+                    LabeledContent("Rings") {
+                        KindPicker(kind: $model.kind)
                     }
-                    .pickerStyle(.segmented)
 
                     if model.kind == .repeating {
                         DatePicker("From", selection: minuteBinding(\.fromMinute), displayedComponents: .hourAndMinute)
@@ -123,12 +121,9 @@ struct EditorView: View {
                             Image(systemName: "speaker.fill")
                                 .foregroundStyle(.secondary)
                             Slider(value: $model.alarm.volume, in: 0...1)
-                                .frame(width: 170)
+                                .frame(width: 210)
                             Image(systemName: "speaker.wave.3.fill")
                                 .foregroundStyle(.secondary)
-                            Text(verbatim: "\(Int((model.alarm.volume * 100).rounded()))%")
-                                .monospacedDigit()
-                                .frame(width: 40, alignment: .trailing)
                         }
                     }
 
@@ -254,6 +249,36 @@ struct NumberField: View {
     }
 }
 
+// MARK: - "Several times a day" / "Once a day", each in its own bubble like the days
+
+struct KindPicker: View {
+    @Binding var kind: AlarmKind?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            pill("Several times a day", .repeating)
+            pill("Once a day", .once)
+        }
+    }
+
+    private func pill(_ title: String, _ value: AlarmKind) -> some View {
+        let on = kind == value
+        return Button {
+            kind = value
+        } label: {
+            Text(verbatim: title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(on ? Color.white : Color.primary)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .background(Capsule().fill(on ? Color.accentColor : Color.secondary.opacity(0.18)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
 // MARK: - S M T W T F S
 
 struct DaysPicker: View {
@@ -309,7 +334,7 @@ final class EditorPanel: NSPanel {
         hidesOnDeactivate = false
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = UserDefaults.standard.integer(forKey: "DingPanelStyle") != 1   // corner test
+        hasShadow = true
         isMovable = false
         isReleasedWhenClosed = false
         collectionBehavior = [.moveToActiveSpace, .transient, .ignoresCycle, .fullScreenAuxiliary]
@@ -356,24 +381,21 @@ final class EditorController: NSObject {
 
     /// The same glass as the menu (macOS 26 and later), or the menu material on older systems.
     private static func background(around content: NSView) -> NSView {
-        let style = UserDefaults.standard.integer(forKey: "DingPanelStyle")   // corner test: 0 as before
-        if #available(macOS 26.0, *), style != 3 {
+        if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
             glass.cornerRadius = 12
             glass.contentView = content
-            if style == 2 || style == 4 {
-                // Clip everything, glass included, to the rounded shape.
-                let clip = NSView()
-                clip.wantsLayer = true
-                clip.layer?.cornerRadius = 12
-                clip.layer?.cornerCurve = .continuous
-                clip.layer?.masksToBounds = true
-                glass.frame = clip.bounds
-                glass.autoresizingMask = [.width, .height]
-                clip.addSubview(glass)
-                return clip
-            }
-            return glass
+            // Clip the glass to the rounded shape. Unclipped, its blur filled the whole rectangle
+            // and the shadow followed that rectangle, which showed as dark square corners.
+            let clip = NSView()
+            clip.wantsLayer = true
+            clip.layer?.cornerRadius = 12
+            clip.layer?.cornerCurve = .continuous
+            clip.layer?.masksToBounds = true
+            glass.frame = clip.bounds
+            glass.autoresizingMask = [.width, .height]
+            clip.addSubview(glass)
+            return clip
         }
         let effect = NSVisualEffectView()
         effect.material = .menu
