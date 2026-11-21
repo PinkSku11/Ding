@@ -206,10 +206,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alarm = existing
             isNew = false
         } else {
-            var fresh = Alarm()
-            let hour = Calendar.current.component(.hour, from: Date())
-            fresh.timeMinute = ((hour + 1) % 24) * 60   // the next full hour
-            alarm = fresh
+            // A new alarm starts blank: no name, no sound, times at 00:00, numbers and volume at 0.
+            alarm = Alarm(name: "", kind: .once, fromMinute: 0, untilMinute: 0, every: 0,
+                          timeMinute: 0, days: [], sound: "", plays: 0, volume: 0, ringWhenMuted: false)
             isNew = true
         }
         let controller = EditorWindowController(alarm: alarm, isNew: isNew)

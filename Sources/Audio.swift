@@ -158,6 +158,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
 
     /// Starts an alarm's sound following its settings. Returns false when it should stay silent.
     private func startSound(for alarm: Alarm) -> Bool {
+        if alarm.sound.isEmpty || alarm.plays <= 0 || alarm.volume <= 0 { return false }
         if SystemAudio.isMicrophoneInUse() { return false }
         let muted = SystemAudio.isMuted()
         if muted && !alarm.ringWhenMuted { return false }
@@ -177,10 +178,10 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         newPlayer.volume = 0
         switch alarm.playUnit {
         case .times:
-            newPlayer.numberOfLoops = max(1, alarm.plays) - 1
+            newPlayer.numberOfLoops = alarm.plays - 1
         case .seconds:
             newPlayer.numberOfLoops = -1
-            schedule(after: TimeInterval(max(1, alarm.plays))) { [weak self] in self?.soundEnded() }
+            schedule(after: TimeInterval(alarm.plays)) { [weak self] in self?.soundEnded() }
         }
         newPlayer.prepareToPlay()
         newPlayer.play()

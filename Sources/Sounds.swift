@@ -37,8 +37,9 @@ enum SoundLibrary {
             }
     }
 
-    /// The file for a sound id. Falls back to Glass if the file is gone.
+    /// The file for a sound id. "None" (an empty id) has no file; a missing file falls back to Glass.
     static func url(for id: String) -> URL? {
+        if id.isEmpty { return nil }
         if let match = (custom() + system()).first(where: { $0.id == id }) {
             return match.url
         }

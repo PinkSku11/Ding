@@ -5,12 +5,27 @@ import SwiftUI
 
 final class EditorModel: ObservableObject {
     @Published var alarm: Alarm
+    @Published var kind: AlarmKind?          // nothing chosen yet for a new alarm
     @Published var previewing = false
     let isNew: Bool
 
     init(alarm: Alarm, isNew: Bool) {
         self.alarm = alarm
+        self.kind = isNew ? nil : alarm.kind
         self.isNew = isNew
+    }
+
+    /// An alarm can be saved once it knows how it rings.
+    var canSave: Bool {
+        switch kind {
+        case .none: return false
+        case .some(.repeating): return alarm.every > 0
+        case .some(.once): return true
+        }
+    }
+
+    var hasSoundToPlay: Bool {
+        !alarm.sound.isEmpty && alarm.plays > 0 && alarm.volume > 0
     }
 }
 
@@ -31,13 +46,13 @@ struct EditorView: View {
                 Section {
                     TextField("Name", text: $model.alarm.name, prompt: Text("Alarm"))
 
-                    Picker("Rings", selection: $model.alarm.kind) {
-                        Text("Several times a day").tag(AlarmKind.repeating)
-                        Text("Once a day").tag(AlarmKind.once)
+                    Picker("Rings", selection: $model.kind) {
+                        Text("Several times a day").tag(AlarmKind?.some(.repeating))
+                        Text("Once a day").tag(AlarmKind?.some(.once))
                     }
                     .pickerStyle(.segmented)
 
-                    if model.alarm.kind == .repeating {
+                    if model.kind == .repeating {
                         DatePicker("From", selection: minuteBinding(\.fromMinute), displayedComponents: .hourAndMinute)
                         DatePicker("Until", selection: minuteBinding(\.untilMinute), displayedComponents: .hourAndMinute)
                         LabeledContent("Every") {
@@ -51,7 +66,7 @@ struct EditorView: View {
                                 .fixedSize()
                             }
                         }
-                    } else {
+                    } else if model.kind == .once {
                         DatePicker("Time", selection: minuteBinding(\.timeMinute), displayedComponents: .hourAndMinute)
                     }
 
@@ -62,6 +77,7 @@ struct EditorView: View {
                     LabeledContent("Sound") {
                         HStack(spacing: 6) {
                             Picker("Sound", selection: soundBinding) {
+                                Text("None").tag("")
                                 Section("Mac sounds") {
                                     ForEach(systemSounds) { sound in
                                         Text(sound.name).tag(sound.id)
@@ -84,6 +100,7 @@ struct EditorView: View {
                                     Label("Preview", systemImage: "play.fill")
                                 }
                             }
+                            .disabled(!model.previewing && !model.hasSoundToPlay)
                         }
                     }
 
@@ -118,7 +135,7 @@ struct EditorView: View {
                 }
             }
             .formStyle(.grouped)
-            .frame(height: model.alarm.kind == .repeating ? 450 : 370)
+            .frame(height: formHeight)
 
             HStack(spacing: 8) {
                 Spacer()
@@ -129,12 +146,21 @@ struct EditorView: View {
                 }
                 Button("Cancel", action: onCancel)
                 Button("Save", action: onSave)
+                    .disabled(!model.canSave)
             }
             .padding(.horizontal, 20)
             .padding(.top, 4)
             .padding(.bottom, 18)
         }
         .frame(width: 520)
+    }
+
+    private var formHeight: CGFloat {
+        switch model.kind {
+        case .some(.repeating): return 450
+        case .some(.once): return 370
+        case .none: return 330
+        }
     }
 
     private func minuteBinding(_ keyPath: WritableKeyPath<Alarm, Int>) -> Binding<Date> {
@@ -186,16 +212,18 @@ struct NumberField: View {
     @State private var text = ""
 
     var body: some View {
-        TextField("", text: $text)
+        TextField("", text: $text, prompt: Text("0"))
             .labelsHidden()
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.trailing)
             .frame(width: 54)
-            .onAppear { text = String(value) }
+            .onAppear { text = value == 0 ? "" : String(value) }
             .onChange(of: text) { _, newText in
                 let digits = String(newText.filter { $0.isASCII && $0.isNumber }.prefix(4))
-                if digits != newText { text = digits }
-                if let number = Int(digits) { value = number }
+                let number = Int(digits) ?? 0
+                let tidy = number == 0 ? (digits.isEmpty ? "" : "0") : String(number)
+                if tidy != newText { text = tidy }
+                value = number
             }
     }
 }
@@ -272,9 +300,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func save() {
+        guard model.canSave, let kind = model.kind else { return }
         var alarm = model.alarm
+        alarm.kind = kind
         alarm.every = max(1, alarm.every)
-        alarm.plays = max(1, alarm.plays)
+        alarm.plays = max(0, alarm.plays)
         alarm.volume = max(0, min(1, alarm.volume))
         if alarm.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             alarm.name = "Alarm"
