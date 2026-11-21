@@ -235,6 +235,19 @@ do {
     check(Format.when(inThreeDays, from: now).hasPrefix("on "), "when later: \(Format.when(inThreeDays, from: now))")
 }
 
+// MARK: 24-hour or AM/PM, as picked in the right-click menu
+
+do {
+    Settings.timeFormat = .twentyFourHour
+    check(Format.time(minute: 13 * 60 + 5) == "13:05", "24-hour: \(Format.time(minute: 13 * 60 + 5))")
+    check(Format.time(minute: 9 * 60) == "09:00", "24-hour morning: \(Format.time(minute: 9 * 60))")
+    Settings.timeFormat = .twelveHour
+    let afternoon = Format.time(minute: 13 * 60 + 5)
+    check(afternoon.hasPrefix("1:05") && afternoon.uppercased().hasSuffix("PM"), "AM/PM: \(afternoon)")
+    check(Format.subtitle(once(21 * 60, days: everyDay)).uppercased().contains("PM"), "AM/PM in the menu details")
+    Settings.timeFormat = .system
+}
+
 // MARK: Saved alarms from older versions still load
 
 do {

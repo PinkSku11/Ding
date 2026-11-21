@@ -95,12 +95,23 @@ enum Schedule {
 // MARK: - Words and times on screen
 
 enum Format {
-    private static let timeFormatter: DateFormatter = {
+    private static var timeFormatters: [TimeFormat: DateFormatter] = [:]
+
+    /// Times as the Mac shows them, or in the 24-hour / AM/PM style picked in Ding's right-click menu.
+    private static var timeFormatter: DateFormatter {
+        let choice = Settings.timeFormat
+        if let formatter = timeFormatters[choice] { return formatter }
         let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
+        if choice == .system {
+            formatter.dateStyle = .none
+            formatter.timeStyle = .short
+        } else {
+            formatter.locale = Settings.timeLocale
+            formatter.setLocalizedDateFormatFromTemplate(choice == .twentyFourHour ? "HHmm" : "hmma")
+        }
+        timeFormatters[choice] = formatter
         return formatter
-    }()
+    }
 
     private static let weekdayFormatter: DateFormatter = {
         let formatter = DateFormatter()

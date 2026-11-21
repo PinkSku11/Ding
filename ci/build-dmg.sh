@@ -202,6 +202,11 @@ cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 shoot editor blue-editor dark || TEST_OK=0
 shoot new blue-new dark || TEST_OK=0
 shoot menu blue-menu dark || TEST_OK=0
+defaults write com.shriya.Ding timeFormat 24
+shoot editor blue-editor-24h dark || TEST_OK=0
+shoot menu blue-menu-24h dark || TEST_OK=0
+shoot options blue-options-24h dark || TEST_OK=0
+defaults delete com.shriya.Ding timeFormat
 rm -f "$SUPPORT/alarms.json"
 [ "$TEST_OK" = 1 ] || fail "test run"
 

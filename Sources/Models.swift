@@ -217,7 +217,37 @@ final class AlarmStore {
 
 // MARK: - Settings
 
+enum TimeFormat: String {
+    case system                      // follow the Mac (as before you choose)
+    case twelveHour = "12"           // 9:00 PM
+    case twentyFourHour = "24"       // 21:00
+}
+
 enum Settings {
+    static var timeFormat: TimeFormat {
+        get { TimeFormat(rawValue: UserDefaults.standard.string(forKey: "timeFormat") ?? "") ?? .system }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "timeFormat") }
+    }
+
+    /// Whether times show as 21:00 rather than 9:00 PM.
+    static var uses24Hour: Bool {
+        switch timeFormat {
+        case .twentyFourHour: return true
+        case .twelveHour: return false
+        case .system:
+            let format = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
+            return !format.contains("a")
+        }
+    }
+
+    /// Your locale, with the hour style you picked.
+    static var timeLocale: Locale {
+        guard timeFormat != .system else { return .autoupdatingCurrent }
+        var components = Locale.Components(locale: .current)
+        components.hourCycle = uses24Hour ? .zeroToTwentyThree : .oneToTwelve
+        return Locale(components: components)
+    }
+
     static var launchedBefore: Bool {
         get { UserDefaults.standard.bool(forKey: "launchedBefore") }
         set { UserDefaults.standard.set(newValue, forKey: "launchedBefore") }

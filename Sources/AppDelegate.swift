@@ -206,6 +206,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func addOptions(to menu: NSMenu) {
+        menu.addItem(NSMenuItem.sectionHeader(title: "Time format"))
+        let uses24Hour = Settings.uses24Hour
+        let twentyFour = NSMenuItem(title: "24-hour", action: #selector(use24Hour), keyEquivalent: "")
+        twentyFour.target = self
+        twentyFour.state = uses24Hour ? .on : .off
+        menu.addItem(twentyFour)
+        let twelve = NSMenuItem(title: "AM/PM", action: #selector(use12Hour), keyEquivalent: "")
+        twelve.target = self
+        twelve.state = uses24Hour ? .off : .on
+        menu.addItem(twelve)
+        menu.addItem(.separator())
+
         let login = NSMenuItem(title: "Open at login", action: #selector(toggleOpenAtLogin), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -232,6 +244,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return "Next: \(soonest.alarm.displayName) \(Format.when(soonest.time))"
     }
 
+
+    @objc private func use24Hour() {
+        Settings.timeFormat = .twentyFourHour
+        Engine.shared.recompute()
+    }
+
+    @objc private func use12Hour() {
+        Settings.timeFormat = .twelveHour
+        Engine.shared.recompute()
+    }
 
     @objc private func toggleOpenAtLogin() {
         let service = SMAppService.mainApp

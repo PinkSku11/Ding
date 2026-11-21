@@ -138,6 +138,7 @@ struct EditorView: View {
             .scrollContentBackground(.hidden)
             .scrollDisabled(true)
             .scrollIndicators(.never)
+            .environment(\.locale, Settings.timeLocale)   // the time boxes follow the 24-hour / AM/PM choice
             .frame(height: formHeight)
 
             HStack(spacing: 8) {
