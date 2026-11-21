@@ -56,10 +56,9 @@ final class NextHeaderView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 34))
         autoresizingMask = [.width]
 
-        let label = NSTextField(labelWithString: text)
-        label.font = .menuFont(ofSize: 13)
-        label.textColor = .tertiaryLabelColor
+        let label = NSTextField(labelWithString: "")
         label.lineBreakMode = .byTruncatingTail
+        label.attributedStringValue = NextHeaderView.styled(text)
         label.frame = NSRect(x: MenuMetrics.labelX, y: 14,
                              width: width - MenuMetrics.labelX - MenuMetrics.cardInset, height: 17)
         label.autoresizingMask = [.width]
@@ -75,6 +74,19 @@ final class NextHeaderView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
+    }
+
+    /// "Next:" softer, the alarm and its time in the normal text colour so they stand out.
+    private static func styled(_ text: String) -> NSAttributedString {
+        let font = NSFont.menuFont(ofSize: 13)
+        let prefix = "Next: "
+        guard text.hasPrefix(prefix) else {
+            return NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: NSColor.secondaryLabelColor])
+        }
+        let result = NSMutableAttributedString(string: prefix, attributes: [.font: font, .foregroundColor: NSColor.secondaryLabelColor])
+        result.append(NSAttributedString(string: String(text.dropFirst(prefix.count)),
+                                         attributes: [.font: font, .foregroundColor: NSColor.labelColor]))
+        return result
     }
 
     private func updateDivider() {
