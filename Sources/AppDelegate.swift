@@ -68,6 +68,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let press = Timer(timeInterval: 2, repeats: false) { _ in self?.lastAddAction?() }
                     RunLoop.main.add(press, forMode: .common)
                     self?.openAlarmMenu()
+                case "editor-switch":   // the editor, then AM/PM picked as from the menu, then the editor again
+                    let first = AlarmStore.shared.alarms.first?.id
+                    self?.openEditor(first)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        self?.editor?.close()
+                        self?.use12Hour()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.openEditor(first) }
+                    }
                 case "editor": self?.openEditor(AlarmStore.shared.alarms.first?.id)
                 case "new": self?.openEditor(nil)
                 default: break
@@ -257,11 +265,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func use24Hour() {
         Settings.timeFormat = .twentyFourHour
+        Format.reset()
         Engine.shared.recompute()
     }
 
     @objc private func use12Hour() {
         Settings.timeFormat = .twelveHour
+        Format.reset()
         Engine.shared.recompute()
     }
 

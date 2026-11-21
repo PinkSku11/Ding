@@ -36,6 +36,28 @@ for ARCH in arm64 x86_64; do
 done
 
 echo
+echo "== Experiment: the Mac's time box on a Mac set to 24-hour time, asked for AM/PM in different ways"
+if xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SDK" \
+        -o "$WORK/timepicker" ci/experiments/timepicker.swift; then
+    defaults write -g AppleICUForce24HourTime -bool true
+    for S in components pref-launch pref-launch-components pref-late pref-late-notify; do
+        defaults delete timepicker 2>/dev/null
+        "$WORK/timepicker" "$S" "$OUT/exp-$S" &
+        EXP=$!
+        sleep 3
+        WID=$(cat "$OUT/exp-$S.wid" 2>/dev/null)
+        [ -n "$WID" ] && screencapture -x -l "$WID" "$OUT/exp-$S.png"
+        wait "$EXP"
+        cat "$OUT/exp-$S.txt" 2>/dev/null
+        rm -f "$OUT/exp-$S.wid"
+    done
+    defaults delete timepicker 2>/dev/null
+    defaults delete -g AppleICUForce24HourTime
+else
+    echo "(the experiment didn't build)"
+fi
+
+echo
 echo "== Scheduling tests"
 xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SDK" \
     -o "$WORK/schedule-tests" Sources/Models.swift Sources/Schedule.swift ci/tests/main.swift || fail "building the tests"
@@ -135,15 +157,28 @@ sleep 9
 FRONT=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null)
 echo "Front app while the editor is open: $FRONT"
 screencapture -x "$OUT/click-before.png"
-python3 ci/click.py click 980 101       # the alarm's name
-python3 ci/click.py key end             # to the end of it
-python3 ci/click.py type " test"
+python3 ci/click.py tripleclick 960 101 # select the alarm's name
+python3 ci/click.py type "Morning stretch"
+sleep 0.5
+screencapture -x "$OUT/click-typed.png"
 python3 ci/click.py click 958 144       # the "Once" button
-sleep 2
+sleep 1.5
 screencapture -x "$OUT/click-after.png"
+python3 ci/click.py key return          # Return saves
+sleep 1.5
+screencapture -x "$OUT/click-saved.png"
 pgrep -x Ding >/dev/null || echo "Ding stopped running in the click test"
 pkill -x Ding
 sleep 1
+python3 - "$SUPPORT/alarms.json" <<'PY' || TEST_OK=0
+import json, sys
+alarm = next(a for a in json.load(open(sys.argv[1])) if a["id"].endswith("000000000001"))
+print(f"Saved by typing and pressing Return: name {alarm['name']!r}, rings {alarm['kind']}")
+if alarm["name"] != "Morning stretch" or alarm["kind"] != "once":
+    print("CLICK TEST PROBLEM: the edit wasn't saved as typed")
+    sys.exit(1)
+PY
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 
 rm -f "$SUPPORT/alarms.json"
 shoot menu empty dark || TEST_OK=0
@@ -215,6 +250,8 @@ echo "== A Mac set to 24-hour time: Ding follows it, and AM/PM can still be pick
 defaults write -g AppleICUForce24HourTime -bool true
 shoot options blue-options-mac24 dark || TEST_OK=0
 shoot menu blue-menu-mac24 dark || TEST_OK=0
+shoot editor-switch blue-editor-switched dark || TEST_OK=0   # AM/PM picked while Ding runs
+echo "Ding's own setting after picking AM/PM: timeFormat=$(defaults read com.shriya.Ding timeFormat 2>/dev/null)"
 defaults write com.shriya.Ding timeFormat 12
 shoot editor blue-editor-ampm dark || TEST_OK=0
 shoot menu blue-menu-ampm dark || TEST_OK=0

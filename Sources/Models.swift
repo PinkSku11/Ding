@@ -226,7 +226,28 @@ enum TimeFormat: String {
 enum Settings {
     static var timeFormat: TimeFormat {
         get { TimeFormat(rawValue: UserDefaults.standard.string(forKey: "timeFormat") ?? "") ?? .system }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: "timeFormat") }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: "timeFormat")
+            applyHourStyle()
+        }
+    }
+
+    /// The Mac's time boxes (in the editor) follow only the Mac's own 24-hour switch, whatever Ding asks for.
+    /// So Ding keeps its own copy of that switch, set to the choice in its right-click menu;
+    /// it applies to Ding alone. Following the Mac removes it. Also run at launch.
+    static func applyHourStyle() {
+        let defaults = UserDefaults.standard
+        switch timeFormat {
+        case .system:
+            defaults.removeObject(forKey: "AppleICUForce24HourTime")
+            defaults.removeObject(forKey: "AppleICUForce12HourTime")
+        case .twentyFourHour:
+            defaults.set(true, forKey: "AppleICUForce24HourTime")
+            defaults.set(false, forKey: "AppleICUForce12HourTime")
+        case .twelveHour:
+            defaults.set(false, forKey: "AppleICUForce24HourTime")
+            defaults.set(true, forKey: "AppleICUForce12HourTime")
+        }
     }
 
     /// Whether times show as 21:00 rather than 9:00 PM.

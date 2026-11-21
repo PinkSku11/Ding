@@ -1,5 +1,3 @@
-out/
+__pycache__/
 .ci-work/
-build/
-build.log
-.DS_Store
+out/
