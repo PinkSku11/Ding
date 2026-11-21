@@ -131,7 +131,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
             let add = NSMenuItem(title: "New alarm…", action: #selector(newAlarm), keyEquivalent: "")
             add.target = self
-            add.image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)
             menu.addItem(add)
         }
 

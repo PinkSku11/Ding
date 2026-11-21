@@ -40,8 +40,10 @@ enum StatusIcon {
 // MARK: - One alarm in the menu: its own bubble, with a switch on the right
 
 final class AlarmRowView: NSView {
-    private static let width: CGFloat = 340
+    private static let width: CGFloat = 352      // the menu stretches rows to its full width
     private static let height: CGFloat = 54
+    private static let cardInset: CGFloat = 16    // equal space on both sides; right edge meets the dividers
+    private static let textInset: CGFloat = 30    // same column as the menu's other text
 
     private let bubble = NSView()
     private let nameLabel = NSTextField(labelWithString: "")
@@ -59,33 +61,41 @@ final class AlarmRowView: NSView {
         self.onOpen = onOpen
         toggle = MenuSwitch(isOn: alarm.isOn)
         super.init(frame: NSRect(x: 0, y: 0, width: AlarmRowView.width, height: AlarmRowView.height))
+        autoresizingMask = [.width]
 
         bubble.wantsLayer = true
         bubble.layer?.cornerRadius = 12
-        bubble.frame = NSRect(x: 8, y: 3, width: AlarmRowView.width - 16, height: AlarmRowView.height - 6)
+        bubble.frame = NSRect(x: AlarmRowView.cardInset,
+                              y: 3,
+                              width: AlarmRowView.width - AlarmRowView.cardInset * 2,
+                              height: AlarmRowView.height - 6)
+        bubble.autoresizingMask = [.width]
         addSubview(bubble)
 
         toggle.setAccessibilityLabel(alarm.displayName)
         toggle.onChange = { [weak self] on in self?.switched(on) }
         let size = MenuSwitch.size
-        toggle.frame = NSRect(x: AlarmRowView.width - 22 - size.width,
+        toggle.frame = NSRect(x: AlarmRowView.width - AlarmRowView.textInset - size.width,
                               y: (AlarmRowView.height - size.height) / 2,
                               width: size.width,
                               height: size.height)
+        toggle.autoresizingMask = [.minXMargin]
         addSubview(toggle)
 
-        let textWidth = toggle.frame.minX - 12 - 22
+        let textWidth = toggle.frame.minX - 12 - AlarmRowView.textInset
         nameLabel.stringValue = alarm.displayName
         nameLabel.font = .menuFont(ofSize: 13)
         nameLabel.lineBreakMode = .byTruncatingTail
-        nameLabel.frame = NSRect(x: 22, y: 28, width: textWidth, height: 17)
+        nameLabel.frame = NSRect(x: AlarmRowView.textInset, y: 28, width: textWidth, height: 17)
+        nameLabel.autoresizingMask = [.width]
         addSubview(nameLabel)
 
         detailLabel.stringValue = detail
         detailLabel.font = .systemFont(ofSize: 11)
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.lineBreakMode = .byTruncatingTail
-        detailLabel.frame = NSRect(x: 22, y: 11, width: textWidth, height: 15)
+        detailLabel.frame = NSRect(x: AlarmRowView.textInset, y: 11, width: textWidth, height: 15)
+        detailLabel.autoresizingMask = [.width]
         addSubview(detailLabel)
 
         updateName(on: alarm.isOn)
@@ -148,26 +158,31 @@ final class EmptyStateView: NSView {
         self.onNew = onNew
         let width: CGFloat = 300
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 156))
+        autoresizingMask = [.width]
 
         circle.wantsLayer = true
         circle.layer?.cornerRadius = 22
         circle.frame = NSRect(x: (width - 44) / 2, y: 98, width: 44, height: 44)
+        circle.autoresizingMask = [.minXMargin, .maxXMargin]
         addSubview(circle)
 
         let bell = NSImageView(frame: NSRect(x: (width - 22) / 2, y: 109, width: 22, height: 22))
         bell.image = NSImage(systemSymbolName: "bell", accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 17, weight: .regular))
         bell.contentTintColor = .labelColor
+        bell.autoresizingMask = [.minXMargin, .maxXMargin]
         addSubview(bell)
 
         let title = NSTextField(labelWithString: "Set up your first alarm")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
         title.alignment = .center
         title.frame = NSRect(x: 0, y: 62, width: width, height: 20)
+        title.autoresizingMask = [.width]
         addSubview(title)
 
         let button = AccentButton(title: "New alarm") { [weak self] in self?.onNew() }
         button.setFrameOrigin(NSPoint(x: (width - button.frame.width) / 2, y: 16))
+        button.autoresizingMask = [.minXMargin, .maxXMargin]
         addSubview(button)
 
         updateCircle()

@@ -71,6 +71,7 @@ SUPPORT="$HOME/Library/Application Support/Ding"
 mkdir -p "$SUPPORT"
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 defaults write com.shriya.Ding launchedBefore -bool true
+defaults write -g NSMenuEnableActionImages -bool NO
 
 shoot() {   # $1: what Ding should show, $2: screenshot name, $3: "dark" for dark mode
     pkill -x Ding 2>/dev/null
