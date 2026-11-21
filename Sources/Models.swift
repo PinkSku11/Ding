@@ -197,7 +197,7 @@ final class AlarmStore {
 
 enum Settings {
     static var keepAwake: Bool {
-        get { UserDefaults.standard.object(forKey: "keepAwake") as? Bool ?? true }
+        get { UserDefaults.standard.object(forKey: "keepAwake") as? Bool ?? false }   // off until you turn it on
         set { UserDefaults.standard.set(newValue, forKey: "keepAwake") }
     }
 

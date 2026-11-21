@@ -26,9 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshIcon()
 
         if !Settings.launchedBefore {
-            // First launch: open at login by default, and open the menu once so you can see where Ding lives.
+            // First launch: open the menu once so you can see where Ding lives.
+            // "Keep Mac awake" and "Open at login" both start off.
             Settings.launchedBefore = true
-            try? SMAppService.mainApp.register()
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                 self?.openMenu()
             }
