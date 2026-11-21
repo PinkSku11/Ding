@@ -59,6 +59,12 @@ codesign --verify --strict --verbose=2 "$APP" || fail "codesign check"
 lipo -info "$APP/Contents/MacOS/Ding"
 du -sh "$APP"
 
+# A clean copy for packaging, made before the test runs touch anything.
+RELEASE="$WORK/release"
+mkdir -p "$RELEASE"
+ditto "$APP" "$RELEASE/Ding.app"
+xattr -cr "$RELEASE/Ding.app"
+
 echo
 echo "== Test run, with screenshots"
 SUPPORT="$HOME/Library/Application Support/Ding"
@@ -127,7 +133,7 @@ echo
 echo "== Making Ding.dmg"
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
-ditto "$APP" "$STAGE/Ding.app"
+ditto "$RELEASE/Ding.app" "$STAGE/Ding.app"
 ln -s /Applications "$STAGE/Applications"
 MADE=0
 for TRY in 1 2 3; do
@@ -140,6 +146,20 @@ for TRY in 1 2 3; do
 done
 [ "$MADE" = 1 ] || fail "making the dmg"
 hdiutil verify "$OUT/Ding.dmg" || fail "checking the dmg"
+
+echo
+echo "== Making Ding.zip"
+ditto -c -k --keepParent "$RELEASE/Ding.app" "$OUT/Ding.zip" || fail "making the zip"
+CHECK="$WORK/zip-check"
+mkdir -p "$CHECK"
+ditto -x -k "$OUT/Ding.zip" "$CHECK" || fail "unpacking the zip"
+codesign --verify --strict --verbose=2 "$CHECK/Ding.app" || fail "signature of the unzipped app"
+pkill -x Ding 2>/dev/null
+open -n "$CHECK/Ding.app"
+sleep 5
+pgrep -x Ding >/dev/null || fail "the unzipped app did not start"
+pkill -x Ding
+echo "OK: unzipped app starts"
 ls -la "$OUT"
 
 echo "success" > "$OUT/status.txt"
