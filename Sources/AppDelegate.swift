@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Ringer.shared.onChange = { [weak self] in self?.refreshIcon() }
         AlarmStore.shared.onChange = { Engine.shared.recompute() }
         Engine.shared.onStateChange = { [weak self] in self?.refreshIcon() }
+        AlarmStore.shared.moveKeepAwakeIntoAlarms()
         Engine.shared.start()
         refreshIcon()
 
@@ -198,11 +199,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func addOptions(to menu: NSMenu) {
-        let awake = NSMenuItem(title: "Keep Mac awake for alarms", action: #selector(toggleKeepAwake), keyEquivalent: "")
-        awake.target = self
-        awake.state = Settings.keepAwake ? .on : .off
-        menu.addItem(awake)
-
         let login = NSMenuItem(title: "Open at login", action: #selector(toggleOpenAtLogin), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -225,14 +221,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func nextText() -> String {
-        guard let soonest = Engine.shared.soonest() else { return "No alarms are on" }
+        guard let soonest = Engine.shared.soonest() else { return "All alarms are off" }
         return "Next: \(soonest.alarm.displayName) \(Format.when(soonest.time))"
     }
 
-    @objc private func toggleKeepAwake() {
-        Settings.keepAwake.toggle()
-        Engine.shared.settingsChanged()
-    }
 
     @objc private func toggleOpenAtLogin() {
         let service = SMAppService.mainApp

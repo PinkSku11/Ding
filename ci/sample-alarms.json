@@ -9,12 +9,21 @@
     "every": 15,
     "everyUnit": "minutes",
     "timeMinute": 1260,
-    "days": [1, 2, 3, 4, 5, 6, 7],
+    "days": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
     "sound": "Glass",
     "plays": 2,
     "playUnit": "times",
     "volume": 0.8,
-    "ringWhenMuted": false
+    "ringWhenMuted": false,
+    "keepAwake": true
   },
   {
     "id": "6F1C1D2E-0000-4000-8000-000000000002",
@@ -26,7 +35,13 @@
     "every": 1,
     "everyUnit": "hours",
     "timeMinute": 1260,
-    "days": [2, 3, 4, 5, 6],
+    "days": [
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
     "sound": "Hero",
     "plays": 1,
     "playUnit": "times",
@@ -43,7 +58,15 @@
     "every": 15,
     "everyUnit": "minutes",
     "timeMinute": 1260,
-    "days": [1, 2, 3, 4, 5, 6, 7],
+    "days": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
     "sound": "Ping",
     "plays": 3,
     "playUnit": "seconds",
@@ -60,7 +83,10 @@
     "every": 15,
     "everyUnit": "minutes",
     "timeMinute": 420,
-    "days": [1, 7],
+    "days": [
+      1,
+      7
+    ],
     "sound": "Glass",
     "plays": 2,
     "playUnit": "times",

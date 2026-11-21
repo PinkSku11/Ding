@@ -273,7 +273,9 @@ final class AlarmRowView: NSView {
     }
 
     private func updateName(on: Bool) {
-        nameLabel.textColor = on ? .labelColor : .secondaryLabelColor
+        // An alarm that's off greys out completely, so you can tell at a glance.
+        nameLabel.textColor = on ? .labelColor : .tertiaryLabelColor
+        detailLabel.textColor = on ? .secondaryLabelColor : .tertiaryLabelColor
     }
 
     private func updateBubble() {

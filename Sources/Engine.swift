@@ -118,7 +118,7 @@ final class Engine: NSObject {
 
     /// "Keep Mac awake for alarms": no idle sleep while an alarm's time range is running.
     private func updateKeepAwake(_ now: Date) {
-        let wanted = Settings.keepAwake && AlarmStore.shared.alarms.contains { Schedule.wantsMacAwake($0, at: now) }
+        let wanted = AlarmStore.shared.alarms.contains { $0.keepAwake && Schedule.wantsMacAwake($0, at: now) }
         if wanted, sleepBlocker == nil {
             sleepBlocker = ProcessInfo.processInfo.beginActivity(
                 options: .idleSystemSleepDisabled,

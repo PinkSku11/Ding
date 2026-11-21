@@ -142,7 +142,7 @@ enum Format {
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(date, inSameDayAs: tomorrow) {
             return "Next tomorrow at \(time(date))"
         }
-        return "Next \(weekdayFormatter.string(from: date)) at \(time(date))"
+        return "Next on \(weekdayFormatter.string(from: date)) at \(time(date))"
     }
 
     static func every(_ alarm: Alarm) -> String {

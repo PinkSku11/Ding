@@ -127,7 +127,10 @@ struct EditorView: View {
                         }
                     }
 
-                    Toggle("Ring when Mac is muted", isOn: $model.alarm.ringWhenMuted)
+                    Toggle("Ring even when muted", isOn: $model.alarm.ringWhenMuted)
+                        .toggleStyle(.switch)
+
+                    Toggle("Keep Mac awake", isOn: $model.alarm.keepAwake)
                         .toggleStyle(.switch)
                 }
             }
@@ -170,9 +173,9 @@ struct EditorView: View {
 
     private var formHeight: CGFloat {
         switch model.kind {
-        case .some(.repeating): return 460   // the Rings bubbles are 10 pt taller than the old switcher
-        case .some(.once): return 378
-        case .none: return 338
+        case .some(.repeating): return 497
+        case .some(.once): return 415
+        case .none: return 375
         }
     }
 
@@ -258,8 +261,8 @@ struct KindPicker: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            pill("Several times a day", .repeating)
-            pill("Once a day", .once)
+            pill("Repeating", .repeating)
+            pill("Once", .once)
         }
     }
 

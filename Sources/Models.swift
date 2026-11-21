@@ -34,6 +34,7 @@ struct Alarm: Codable, Identifiable, Equatable {
     var playUnit: PlayUnit
     var volume: Double           // 0…1, the Mac's output volume while the alarm plays
     var ringWhenMuted: Bool
+    var keepAwake: Bool          // keep the Mac from sleeping while this alarm is running
 
     init(id: UUID = UUID(),
          name: String = "",
@@ -50,7 +51,8 @@ struct Alarm: Codable, Identifiable, Equatable {
          plays: Int = 2,
          playUnit: PlayUnit = .times,
          volume: Double = 0.8,
-         ringWhenMuted: Bool = false) {
+         ringWhenMuted: Bool = false,
+         keepAwake: Bool = false) {
         self.id = id
         self.name = name
         self.isOn = isOn
@@ -67,11 +69,12 @@ struct Alarm: Codable, Identifiable, Equatable {
         self.playUnit = playUnit
         self.volume = volume
         self.ringWhenMuted = ringWhenMuted
+        self.keepAwake = keepAwake
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, isOn, kind, fromMinute, untilMinute, every, everyUnit, timeMinute
-        case days, oneOffDay, sound, plays, playUnit, volume, ringWhenMuted
+        case days, oneOffDay, sound, plays, playUnit, volume, ringWhenMuted, keepAwake
     }
 
     // Tolerant decoding, so alarms saved by an older version still load.
@@ -94,6 +97,7 @@ struct Alarm: Codable, Identifiable, Equatable {
         playUnit = try c.decodeIfPresent(PlayUnit.self, forKey: .playUnit) ?? d.playUnit
         volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? d.volume
         ringWhenMuted = try c.decodeIfPresent(Bool.self, forKey: .ringWhenMuted) ?? d.ringWhenMuted
+        keepAwake = try c.decodeIfPresent(Bool.self, forKey: .keepAwake) ?? d.keepAwake
     }
 
     var displayName: String {
@@ -179,6 +183,19 @@ final class AlarmStore {
         }
     }
 
+    /// "Keep Mac awake" used to be one option in the right-click menu. It now lives in each alarm;
+    /// if it was on, switch it on for every existing alarm, once.
+    func moveKeepAwakeIntoAlarms() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: "keepAwakeMoved") else { return }
+        defaults.set(true, forKey: "keepAwakeMoved")
+        guard defaults.bool(forKey: "keepAwake") else { return }
+        for index in alarms.indices {
+            alarms[index].keepAwake = true
+        }
+        write()
+    }
+
     private func persist() {
         write()
         onChange?()
@@ -196,11 +213,6 @@ final class AlarmStore {
 // MARK: - Settings
 
 enum Settings {
-    static var keepAwake: Bool {
-        get { UserDefaults.standard.object(forKey: "keepAwake") as? Bool ?? false }   // off until you turn it on
-        set { UserDefaults.standard.set(newValue, forKey: "keepAwake") }
-    }
-
     static var launchedBefore: Bool {
         get { UserDefaults.standard.bool(forKey: "launchedBefore") }
         set { UserDefaults.standard.set(newValue, forKey: "launchedBefore") }
