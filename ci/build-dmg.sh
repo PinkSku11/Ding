@@ -105,6 +105,21 @@ shoot menu menu-light || TEST_OK=0
 shoot options options dark || TEST_OK=0
 
 echo
+echo "== Switch test: film the menu while an alarm is switched off"
+pkill -x Ding 2>/dev/null
+sleep 1
+open -n "$APP" --args -DingShow menu
+sleep 5
+screencapture -v -V 2 -x -R 930,100,72,42 "$OUT/switch.mov" >/dev/null 2>&1 &
+sleep 0.6
+python3 ci/click.py click 965 120       # the first alarm's switch
+sleep 2.6
+ls -la "$OUT/switch.mov" 2>/dev/null || echo "(no switch video)"
+pkill -x Ding
+sleep 1
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+
+echo
 echo "== Click test: another app in front; open the editor, close it, open it again, then use it"
 pkill -x Ding 2>/dev/null
 sleep 1

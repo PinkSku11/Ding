@@ -290,7 +290,10 @@ final class AlarmRowView: NSView {
 
     private func switched(_ on: Bool) {
         updateName(on: on)
-        onToggle(on)
+        // Save once the knob has settled, so nothing on the main thread interrupts the animation.
+        let save = onToggle
+        let timer = Timer(timeInterval: 0.35, repeats: false) { _ in save(on) }
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     override func updateTrackingAreas() {
@@ -381,6 +384,8 @@ final class MenuSwitch: NSView {
     var onChange: ((Bool) -> Void)?
     private let track = CALayer()
     private let knob = CALayer()
+    private var pressed = false
+    private var laidOutSize = NSSize.zero
 
     init(isOn: Bool) {
         self.isOn = isOn
@@ -395,53 +400,100 @@ final class MenuSwitch: NSView {
         knob.shadowOffset = CGSize(width: 0, height: -0.5)
         setAccessibilityElement(true)
         setAccessibilityRole(.checkBox)
-        update(animated: false)
+        apply(animated: false)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
     }
 
-    private func update(animated: Bool) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(!animated)
-        CATransaction.setAnimationDuration(0.18)
-        let b = bounds
-        track.frame = b
-        track.cornerRadius = b.height / 2
+    private func knobRect() -> CGRect {
         let inset: CGFloat = 2
-        let knobHeight = b.height - inset * 2
-        let knobWidth = knobHeight + 8          // a pill, like the Mac's own switches
-        knob.bounds = CGRect(x: 0, y: 0, width: knobWidth, height: knobHeight)
-        knob.cornerRadius = knobHeight / 2
-        knob.position = CGPoint(x: isOn ? b.width - inset - knobWidth / 2 : inset + knobWidth / 2, y: b.midY)
+        let height = bounds.height - inset * 2
+        let width = height + 8 + (pressed ? 5 : 0)   // a pill that stretches a little while held, like the Mac's own
+        let x = isOn ? bounds.width - inset - width : inset
+        return CGRect(x: x, y: inset, width: width, height: height)
+    }
+
+    private func trackColor() -> CGColor {
+        var color = NSColor.clear.cgColor
         let on = isOn
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let color = on ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.2)
-            self.track.backgroundColor = color.cgColor
+            color = (on ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.2)).cgColor
         }
+        return color
+    }
+
+    /// Moves the knob and recolours the track, animated with a soft spring like the system switch.
+    private func apply(animated: Bool) {
+        let rect = knobRect()
+        let newPosition = CGPoint(x: rect.midX, y: rect.midY)
+        let newBounds = CGRect(origin: .zero, size: rect.size)
+        let newColor = trackColor()
+
+        // Start from wherever the knob is on screen right now, so a quick second click stays smooth.
+        let oldPosition = knob.presentation()?.position ?? knob.position
+        let oldBounds = knob.presentation()?.bounds ?? knob.bounds
+        let oldColor = track.presentation()?.backgroundColor ?? track.backgroundColor
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        track.frame = bounds
+        track.cornerRadius = bounds.height / 2
+        track.backgroundColor = newColor
+        knob.bounds = newBounds
+        knob.position = newPosition
+        knob.cornerRadius = rect.height / 2
         CATransaction.commit()
-        setAccessibilityValue(on)
+
+        if animated {
+            knob.add(spring("position", from: NSValue(point: oldPosition), to: NSValue(point: newPosition)), forKey: "position")
+            knob.add(spring("bounds", from: NSValue(rect: oldBounds), to: NSValue(rect: newBounds)), forKey: "bounds")
+            let fade = CABasicAnimation(keyPath: "backgroundColor")
+            fade.fromValue = oldColor
+            fade.toValue = newColor
+            fade.duration = 0.25
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            track.add(fade, forKey: "backgroundColor")
+        }
+        setAccessibilityValue(isOn)
+    }
+
+    private func spring(_ keyPath: String, from: Any, to: Any) -> CASpringAnimation {
+        let animation = CASpringAnimation(keyPath: keyPath)
+        animation.fromValue = from
+        animation.toValue = to
+        animation.mass = 1
+        animation.stiffness = 420
+        animation.damping = 32
+        animation.duration = animation.settlingDuration
+        return animation
     }
 
     override func layout() {
         super.layout()
-        update(animated: false)
+        guard bounds.size != laidOutSize else { return }   // only when the size really changes, never mid-animation
+        laidOutSize = bounds.size
+        apply(animated: false)
     }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        update(animated: false)
+        apply(animated: false)
     }
 
-    override func mouseDown(with event: NSEvent) {}
+    override func mouseDown(with event: NSEvent) {
+        pressed = true
+        apply(animated: true)
+    }
 
     override func mouseUp(with event: NSEvent) {
+        pressed = false
         let point = convert(event.locationInWindow, from: nil)
-        guard bounds.insetBy(dx: -6, dy: -6).contains(point) else { return }
-        isOn.toggle()
-        update(animated: true)
-        onChange?(isOn)
+        let toggled = bounds.insetBy(dx: -6, dy: -6).contains(point)
+        if toggled { isOn.toggle() }
+        apply(animated: true)
+        if toggled { onChange?(isOn) }
     }
 }
 
