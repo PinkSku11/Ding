@@ -156,10 +156,11 @@ enum Format {
     static func days(_ alarm: Alarm) -> String {
         let calendar = Calendar.current
         if alarm.isOneOff {
-            guard let day = alarm.oneOffDay else { return "Once" }
-            if calendar.isDateInToday(day) || calendar.isDateInYesterday(day) { return "Today" }
-            if calendar.isDateInTomorrow(day) { return "Tomorrow" }
-            return weekdayFormatter.string(from: day)
+            // No days picked: it rings one time, then switches itself off.
+            guard alarm.isOn, let day = alarm.oneOffDay else { return "One time" }
+            if calendar.isDateInToday(day) || calendar.isDateInYesterday(day) { return "Today only" }
+            if calendar.isDateInTomorrow(day) { return "Tomorrow only" }
+            return "\(weekdayFormatter.string(from: day)) only"
         }
         let days = alarm.days
         let symbols = calendar.shortWeekdaySymbols   // index 0 is Sunday
@@ -174,9 +175,12 @@ enum Format {
     static func subtitle(_ alarm: Alarm) -> String {
         switch alarm.kind {
         case .repeating:
-            return "\(every(alarm)) · \(time(minute: alarm.fromMinute))–\(time(minute: alarm.untilMinute)) · \(days(alarm))"
+            let range = alarm.fromMinute == alarm.untilMinute
+                ? "All day"
+                : "\(time(minute: alarm.fromMinute))–\(time(minute: alarm.untilMinute))"
+            return "\(every(alarm)) · \(range) · \(days(alarm))"
         case .once:
-            return "Once · \(time(minute: alarm.timeMinute)) · \(days(alarm))"
+            return "\(time(minute: alarm.timeMinute)) · \(days(alarm))"
         }
     }
 }

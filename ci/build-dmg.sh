@@ -36,6 +36,12 @@ for ARCH in arm64 x86_64; do
 done
 
 echo
+echo "== Scheduling tests"
+xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SDK" \
+    -o "$WORK/schedule-tests" Sources/Models.swift Sources/Schedule.swift ci/tests/main.swift || fail "building the tests"
+TZ=Asia/Kolkata "$WORK/schedule-tests" || fail "scheduling tests"
+
+echo
 echo "== Putting Ding.app together"
 APP="$WORK/Ding.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -165,6 +171,26 @@ pgrep -x Ding >/dev/null || fail "Ding stopped running during the ring test"
 pkill -x Ding
 rm -f "$SUPPORT/alarms.json"
 echo "OK: ringing"
+
+echo
+echo "== Live test: real alarms over the next few minutes"
+pkill -x Ding 2>/dev/null
+sleep 1
+FIRST=$(python3 ci/live-alarms.py "$SUPPORT/alarms.json")
+if [ -n "$FIRST" ]; then
+    rm -f /tmp/ding-rings.log
+    open -n "$APP" --args -DingRingLog /tmp/ding-rings.log
+    WAIT=$(python3 -c "import time; print(max(0, int($FIRST + 4 * 60 + 20 - time.time())))")
+    echo "First ring at $FIRST, waiting $WAIT s"
+    sleep "$WAIT"
+    pkill -x Ding
+    sleep 1
+    cp /tmp/ding-rings.log "$OUT/ring-log.txt" 2>/dev/null
+    python3 ci/check-live.py /tmp/ding-rings.log "$SUPPORT/alarms.json" "$FIRST" || fail "live test"
+else
+    echo "(live test skipped: too close to midnight)"
+fi
+rm -f "$SUPPORT/alarms.json"
 
 echo
 echo "== Over a blue desktop: the editor and the menu"

@@ -201,6 +201,11 @@ final class PlusButton: NSView {
             action()
         }
     }
+
+    override func accessibilityPerformPress() -> Bool {
+        action()
+        return true
+    }
 }
 
 // MARK: - One alarm in the menu: its own bubble, with a switch on the right
@@ -497,6 +502,13 @@ final class MenuSwitch: NSView {
         apply(animated: true)
         if toggled { onChange?(isOn) }
     }
+
+    override func accessibilityPerformPress() -> Bool {
+        isOn.toggle()
+        apply(animated: true)
+        onChange?(isOn)
+        return true
+    }
 }
 
 // MARK: - Blue pill button for the empty menu
@@ -559,5 +571,10 @@ final class AccentButton: NSView {
         if bounds.contains(point) {
             action()
         }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        action()
+        return true
     }
 }

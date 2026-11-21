@@ -419,7 +419,8 @@ final class EditorController: NSObject {
     /// or right under the bell when there's no list.
     func show(anchor: NSRect?, below button: NSStatusBarButton?) {
         let size = fittingSize()
-        let screen = button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let anchorScreen = anchor.flatMap { rect in NSScreen.screens.first { $0.frame.intersects(rect) } }
+        let screen = anchorScreen ?? button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let visible = screen.visibleFrame
         var x = visible.maxX - size.width - 8
         var top = visible.maxY - 1

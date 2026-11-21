@@ -7,6 +7,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastAddAction: (() -> Void)?   // the + in the most recent alarm list (used by the build machine's test)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Only one Ding at a time, or every alarm would ring twice. The copy you just opened wins.
+        if let bundleID = Bundle.main.bundleIdentifier {
+            for other in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            where other != NSRunningApplication.current {
+                other.terminate()
+            }
+        }
         if UserDefaults.standard.bool(forKey: "DingDark") {   // build machine screenshots only
             NSApp.appearance = NSAppearance(named: .darkAqua)
         }

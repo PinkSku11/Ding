@@ -140,7 +140,9 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         current = ring
         setRinging(true)
         notificationID = Notifier.shared.post(ring)
-        if !startSound(for: ring.alarm) {
+        let played = startSound(for: ring.alarm)
+        RingLog.write("ring \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970) sound \(played ? "played" : "silent")")
+        if !played {
             // No sound this time (a call, the Mac is muted, or a missing file): just show the notification.
             schedule(after: 5) { [weak self] in self?.ringFinished() }
         }
@@ -176,16 +178,19 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
 
         newPlayer.delegate = self
         newPlayer.volume = 1
+        let length: TimeInterval
         switch alarm.playUnit {
         case .times:
             newPlayer.numberOfLoops = alarm.plays - 1
+            length = newPlayer.duration * Double(alarm.plays) + 2   // safety stop, a little after it should end
         case .seconds:
             newPlayer.numberOfLoops = -1
-            schedule(after: TimeInterval(alarm.plays)) { [weak self] in self?.soundEnded() }
+            length = TimeInterval(alarm.plays)
         }
         newPlayer.prepareToPlay()
-        newPlayer.play()
+        guard newPlayer.play() else { return false }
         player = newPlayer
+        schedule(after: length) { [weak self] in self?.soundEnded() }
         return true
     }
 

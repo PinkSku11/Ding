@@ -1,5 +1,22 @@
 import AppKit
 
+/// One line per ring, written only when Ding is started with -DingRingLog <path> (the build machine's live test).
+enum RingLog {
+    private static let path = UserDefaults.standard.string(forKey: "DingRingLog")
+
+    static func write(_ line: String) {
+        guard let path else { return }
+        let entry = "\(Date().timeIntervalSince1970) \(line)\n"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(entry.utf8))
+            handle.closeFile()
+        } else {
+            try? entry.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
+}
+
 /// One alarm going off.
 struct Ring {
     let alarm: Alarm
@@ -98,9 +115,12 @@ final class Engine: NSObject {
             // More than a minute late means the Mac was asleep or off: skip it quietly.
             if now.timeIntervalSince(time) <= 60 {
                 rings.append(Ring(alarm: alarm, time: time, next: next))
+            } else {
+                RingLog.write("skipped \(alarm.id.uuidString) due \(time.timeIntervalSince1970)")
             }
             if next == nil && alarm.isOneOff {
                 finished.append(alarm.id)
+                RingLog.write("off \(alarm.id.uuidString)")
             }
         }
 

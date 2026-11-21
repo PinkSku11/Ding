@@ -10,6 +10,7 @@ struct SoundOption: Identifiable, Hashable {
 /// The Mac's built-in alert sounds, plus sound files you add.
 enum SoundLibrary {
     static let addFileTag = "__add_sound_file__"
+    static let fileTypes = ["aiff", "aif", "wav", "mp3", "m4a", "caf", "aac", "flac"]
 
     static var customFolder: URL {
         let folder = AppPaths.supportFolder.appendingPathComponent("Sounds", isDirectory: true)
@@ -26,7 +27,7 @@ enum SoundLibrary {
     }
 
     private static func sounds(in folder: URL, custom: Bool) -> [SoundOption] {
-        let types: Set<String> = ["aiff", "aif", "wav", "mp3", "m4a", "caf", "aac"]
+        let types = Set(fileTypes)
         let urls = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         return urls
             .filter { types.contains($0.pathExtension.lowercased()) }
@@ -50,7 +51,7 @@ enum SoundLibrary {
     /// Asks for an audio file, copies it into Ding's sounds folder and returns its sound id.
     static func addFile() -> String? {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.audio]
+        panel.allowedContentTypes = fileTypes.compactMap { UTType(filenameExtension: $0) }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = "Choose a sound for your alarm"

@@ -131,9 +131,14 @@ final class AlarmStore {
 
     private init() {
         fileURL = AppPaths.supportFolder.appendingPathComponent("alarms.json")
-        if let data = try? Data(contentsOf: fileURL),
-           let list = try? JSONDecoder().decode([Alarm].self, from: data) {
+        guard let data = try? Data(contentsOf: fileURL) else { return }
+        if let list = try? JSONDecoder().decode([Alarm].self, from: data) {
             alarms = list
+        } else {
+            // The file can't be read: keep it aside instead of overwriting it with the next save.
+            let stamp = Int(Date().timeIntervalSince1970)
+            let backup = fileURL.deletingLastPathComponent().appendingPathComponent("alarms (unreadable \(stamp)).json")
+            try? FileManager.default.moveItem(at: fileURL, to: backup)
         }
     }
 
