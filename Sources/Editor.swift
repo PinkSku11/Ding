@@ -133,6 +133,8 @@ struct EditorView: View {
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
+            .scrollDisabled(true)
+            .scrollIndicators(.never)
             .frame(height: formHeight)
 
             HStack(spacing: 8) {
@@ -168,9 +170,9 @@ struct EditorView: View {
 
     private var formHeight: CGFloat {
         switch model.kind {
-        case .some(.repeating): return 450
-        case .some(.once): return 368
-        case .none: return 328
+        case .some(.repeating): return 460   // the Rings bubbles are 10 pt taller than the old switcher
+        case .some(.once): return 378
+        case .none: return 338
         }
     }
 
