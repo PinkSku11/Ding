@@ -123,7 +123,9 @@ struct EditorView: View {
             HStack(spacing: 8) {
                 Spacer()
                 if !model.isNew {
-                    Button("Delete", role: .destructive, action: onDelete)
+                    Button(role: .destructive, action: onDelete) {
+                        Text("Delete").foregroundStyle(.red)
+                    }
                 }
                 Button("Cancel", action: onCancel)
                 Button("Save", action: onSave)

@@ -95,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        if UserDefaults.standard.bool(forKey: "DingDark") {   // build machine screenshots only
+            menu.appearance = NSAppearance(named: .darkAqua)
+        }
         let alarms = sortedAlarms()
 
         if alarms.isEmpty {
