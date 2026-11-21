@@ -133,10 +133,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             menu.addItem(item)
         } else {
-            let header = NSMenuItem(title: nextText(), action: nil, keyEquivalent: "")
-            header.isEnabled = false
+            let header = NSMenuItem()
+            header.view = NextHeaderView(text: nextText())
             menu.addItem(header)
-            menu.addItem(.separator())
             let alarmsHeader = NSMenuItem()
             alarmsHeader.view = AlarmsHeaderView { [weak self, weak menu] in
                 menu?.cancelTracking()
@@ -157,6 +156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     })
                 menu.addItem(item)
             }
+            let spacer = NSMenuItem()
+            spacer.view = MenuSpacerView(height: 8)
+            menu.addItem(spacer)
         }
 
         if includeOptions {

@@ -46,6 +46,61 @@ enum MenuMetrics {
     static let labelX: CGFloat = textInset - 2   // a text label draws its text 2 pt in from its frame
 }
 
+// MARK: - "Next: …" line with a divider under it
+
+final class NextHeaderView: NSView {
+    private let divider = NSView()
+
+    init(text: String) {
+        let width = MenuMetrics.width
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 34))
+        autoresizingMask = [.width]
+
+        let label = NSTextField(labelWithString: text)
+        label.font = .menuFont(ofSize: 13)
+        label.textColor = .tertiaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.frame = NSRect(x: MenuMetrics.labelX, y: 14,
+                             width: width - MenuMetrics.labelX - MenuMetrics.cardInset, height: 17)
+        label.autoresizingMask = [.width]
+        addSubview(label)
+
+        divider.wantsLayer = true
+        divider.frame = NSRect(x: MenuMetrics.textInset, y: 5,
+                               width: width - MenuMetrics.textInset - MenuMetrics.cardInset, height: 1)
+        divider.autoresizingMask = [.width]
+        addSubview(divider)
+        updateDivider()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    private func updateDivider() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.divider.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateDivider()
+    }
+}
+
+/// Empty space at the bottom of the list, so the last card has room around it like the sides.
+final class MenuSpacerView: NSView {
+    init(height: CGFloat) {
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: height))
+        autoresizingMask = [.width]
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+}
+
 // MARK: - "Alarms" heading with a + button on the right, in line with the switches
 
 final class AlarmsHeaderView: NSView {
