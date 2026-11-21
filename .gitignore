@@ -1,0 +1,5 @@
+out/
+.ci-work/
+build/
+build.log
+.DS_Store

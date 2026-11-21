@@ -1,0 +1,117 @@
+#!/bin/bash
+# Builds Ding.app for Apple silicon and Intel Macs, test-runs it, and packs it into Ding.dmg.
+# Runs on GitHub's Mac build machines (see .github/workflows/build.yml).
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" || exit 1
+OUT="$ROOT/out"
+WORK="$ROOT/.ci-work"
+rm -rf "$OUT" "$WORK"
+mkdir -p "$OUT" "$WORK"
+
+fail() {
+    echo
+    echo "FAILED: $*"
+    echo "failure" > "$OUT/status.txt"
+    exit 1
+}
+
+echo "== Machine"
+sw_vers
+xcodebuild -version | head -n 2
+echo "SDK $(xcrun --sdk macosx --show-sdk-version)"
+xcrun swiftc --version 2>&1 | head -n 1
+
+SDK="$(xcrun --sdk macosx --show-sdk-path)"
+for ARCH in arm64 x86_64; do
+    echo
+    echo "== Compiling for $ARCH"
+    xcrun swiftc -O -swift-version 5 \
+        -target "$ARCH-apple-macos14.0" \
+        -sdk "$SDK" \
+        -module-name Ding \
+        -o "$WORK/Ding-$ARCH" \
+        Sources/*.swift || fail "compiling for $ARCH"
+done
+
+echo
+echo "== Putting Ding.app together"
+APP="$WORK/Ding.app"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+lipo -create -output "$APP/Contents/MacOS/Ding" "$WORK/Ding-arm64" "$WORK/Ding-x86_64" || fail "lipo"
+cp Info.plist "$APP/Contents/Info.plist"
+printf 'APPL????' > "$APP/Contents/PkgInfo"
+plutil -lint "$APP/Contents/Info.plist" || fail "Info.plist"
+
+ICONSET="$WORK/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for SIZE in 16 32 128 256 512; do
+    DOUBLE=$((SIZE * 2))
+    sips -z "$SIZE" "$SIZE" AppIcon.png --out "$ICONSET/icon_${SIZE}x${SIZE}.png" >/dev/null || fail "icon"
+    sips -z "$DOUBLE" "$DOUBLE" AppIcon.png --out "$ICONSET/icon_${SIZE}x${SIZE}@2x.png" >/dev/null || fail "icon"
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" || fail "iconutil"
+
+xattr -cr "$APP"
+codesign --force --sign - "$APP" || fail "codesign"
+codesign --verify --strict --verbose=2 "$APP" || fail "codesign check"
+lipo -info "$APP/Contents/MacOS/Ding"
+du -sh "$APP"
+
+echo
+echo "== Test run, with screenshots"
+SUPPORT="$HOME/Library/Application Support/Ding"
+mkdir -p "$SUPPORT"
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+defaults write com.shriya.Ding launchedBefore -bool true
+
+shoot() {   # $1: what Ding should show, $2: screenshot name
+    pkill -x Ding 2>/dev/null
+    sleep 1
+    open -n "$APP" --args -DingShow "$1"
+    sleep 8
+    if ! pgrep -x Ding >/dev/null; then
+        echo "Ding stopped running while showing: $1"
+        for REPORT in $(ls -t "$HOME/Library/Logs/DiagnosticReports" 2>/dev/null | grep -i ding | head -n 2); do
+            cp "$HOME/Library/Logs/DiagnosticReports/$REPORT" "$OUT/"
+        done
+        return 1
+    fi
+    screencapture -x "$OUT/$2.png" || echo "(screenshot failed for $2)"
+    pkill -x Ding
+    sleep 1
+    echo "OK: $1"
+    return 0
+}
+
+TEST_OK=1
+shoot menu menu || TEST_OK=0
+shoot editor editor || TEST_OK=0
+shoot new new-alarm || TEST_OK=0
+rm -f "$SUPPORT/alarms.json"
+shoot menu empty || TEST_OK=0
+[ "$TEST_OK" = 1 ] || fail "test run"
+
+echo
+echo "== Making Ding.dmg"
+STAGE="$WORK/dmg"
+mkdir -p "$STAGE"
+ditto "$APP" "$STAGE/Ding.app"
+ln -s /Applications "$STAGE/Applications"
+MADE=0
+for TRY in 1 2 3; do
+    if hdiutil create -volname "Ding" -srcfolder "$STAGE" -ov -format UDZO "$OUT/Ding.dmg"; then
+        MADE=1
+        break
+    fi
+    echo "hdiutil failed (try $TRY), trying again"
+    sleep 5
+done
+[ "$MADE" = 1 ] || fail "making the dmg"
+hdiutil verify "$OUT/Ding.dmg" || fail "checking the dmg"
+ls -la "$OUT"
+
+echo "success" > "$OUT/status.txt"
+echo
+echo "BUILD SUCCEEDED"
