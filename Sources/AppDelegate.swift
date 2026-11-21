@@ -42,7 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 case "menu": self?.openAlarmMenu()
                 case "options": self?.openMenu(self?.buildOptionsMenu())
                 case "menu-plus":
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.lastAddAction?() }
+                    // A run-loop timer still fires while the list is open (a queued block would wait).
+                    let press = Timer(timeInterval: 2, repeats: false) { _ in self?.lastAddAction?() }
+                    RunLoop.main.add(press, forMode: .common)
                     self?.openAlarmMenu()
                 case "editor": self?.openEditor(AlarmStore.shared.alarms.first?.id)
                 case "new": self?.openEditor(nil)
