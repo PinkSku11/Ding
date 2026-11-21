@@ -2,6 +2,7 @@
 
     python3 click.py click X Y     click at a screen point (top-left origin)
     python3 click.py type TEXT     type text into whatever has keyboard focus
+    python3 click.py key end       Command-Right arrow: to the end of the text
 """
 import ctypes
 import sys
@@ -19,6 +20,7 @@ cg.CGEventCreateMouseEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint32, CGPoint
 cg.CGEventCreateKeyboardEvent.restype = ctypes.c_void_p
 cg.CGEventCreateKeyboardEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint16, ctypes.c_bool]
 cg.CGEventKeyboardSetUnicodeString.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_uint16)]
+cg.CGEventSetFlags.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
 cg.CGEventPost.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
 
 if sys.argv[1] == "click":
@@ -36,3 +38,10 @@ elif sys.argv[1] == "type":
             cg.CGEventPost(0, event)
             time.sleep(0.04)
     print("typed", repr(sys.argv[2]))
+elif sys.argv[1] == "key" and sys.argv[2] == "end":
+    for down in (True, False):
+        event = cg.CGEventCreateKeyboardEvent(None, 124, down)   # right arrow
+        cg.CGEventSetFlags(event, 0x100000)                      # with Command
+        cg.CGEventPost(0, event)
+        time.sleep(0.04)
+    print("pressed Command-Right arrow")

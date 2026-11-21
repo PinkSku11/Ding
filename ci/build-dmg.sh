@@ -121,6 +121,7 @@ sleep 0.6
 python3 ci/click.py click 965 120       # the first alarm's switch
 sleep 2.6
 ls -la "$OUT/switch.mov" 2>/dev/null || echo "(no switch video)"
+screencapture -x "$OUT/switch-after.png"   # the "Next:" line and the details update while the menu stays open
 pkill -x Ding
 sleep 1
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
@@ -134,9 +135,10 @@ sleep 9
 FRONT=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null)
 echo "Front app while the editor is open: $FRONT"
 screencapture -x "$OUT/click-before.png"
-python3 ci/click.py click 980 101       # end of the alarm's name
+python3 ci/click.py click 980 101       # the alarm's name
+python3 ci/click.py key end             # to the end of it
 python3 ci/click.py type " test"
-python3 ci/click.py click 917 138       # the "Once a day" button
+python3 ci/click.py click 958 144       # the "Once" button
 sleep 2
 screencapture -x "$OUT/click-after.png"
 pgrep -x Ding >/dev/null || echo "Ding stopped running in the click test"
@@ -180,7 +182,7 @@ FIRST=$(python3 ci/live-alarms.py "$SUPPORT/alarms.json")
 if [ -n "$FIRST" ]; then
     rm -f /tmp/ding-rings.log
     open -n "$APP" --args -DingRingLog /tmp/ding-rings.log
-    WAIT=$(python3 -c "import time; print(max(0, int($FIRST + 4 * 60 + 20 - time.time())))")
+    WAIT=$(python3 -c "import time; print(max(0, int($FIRST + 5 * 60 + 20 - time.time())))")
     echo "First ring at $FIRST, waiting $WAIT s"
     sleep "$WAIT"
     pkill -x Ding
@@ -207,6 +209,17 @@ shoot editor blue-editor-24h dark || TEST_OK=0
 shoot menu blue-menu-24h dark || TEST_OK=0
 shoot options blue-options-24h dark || TEST_OK=0
 defaults delete com.shriya.Ding timeFormat
+
+echo
+echo "== A Mac set to 24-hour time: Ding follows it, and AM/PM can still be picked"
+defaults write -g AppleICUForce24HourTime -bool true
+shoot options blue-options-mac24 dark || TEST_OK=0
+shoot menu blue-menu-mac24 dark || TEST_OK=0
+defaults write com.shriya.Ding timeFormat 12
+shoot editor blue-editor-ampm dark || TEST_OK=0
+shoot menu blue-menu-ampm dark || TEST_OK=0
+defaults delete com.shriya.Ding timeFormat
+defaults delete -g AppleICUForce24HourTime
 rm -f "$SUPPORT/alarms.json"
 [ "$TEST_OK" = 1 ] || fail "test run"
 

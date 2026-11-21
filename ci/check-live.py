@@ -3,10 +3,10 @@ import json
 import sys
 
 log_path, alarms_path, first = sys.argv[1], sys.argv[2], float(sys.argv[3])
-A, B, C, D, E = ("00000000-0000-4000-8000-0000000000" + s for s in ("A1", "B2", "C3", "D4", "E5"))
-names = {A: "Every minute", B: "One-off", C: "Same minute", D: "Switched off", E: "Silent"}
+A, B, C, D, E, F = ("00000000-0000-4000-8000-0000000000" + s for s in ("A1", "B2", "C3", "D4", "E5", "F6"))
+names = {A: "Every minute", B: "One-off", C: "Same minute", D: "Switched off", E: "Silent", F: "Long sound"}
 
-rings, offs, skipped = {}, set(), []
+rings, offs, skipped, busy = {}, set(), [], {}
 for line in open(log_path):
     parts = line.split()
     if len(parts) < 3:
@@ -18,6 +18,8 @@ for line in open(log_path):
         offs.add(alarm)
     elif kind == "skipped":
         skipped.append(names.get(alarm, alarm))
+    elif kind == "busy":
+        busy.setdefault(alarm, []).append(round((float(parts[4]) - first) / 60))
 
 problems = []
 
@@ -37,11 +39,17 @@ def expect(alarm, minutes, sounds=("played", "silent")):
             problems.append(f"{names[alarm]}: sound {sound}, expected {sounds}")
 
 
-expect(A, [0, 1, 2, 3, 4])
-expect(B, [1])
-expect(C, [2])
+expect(A, [0, 1, 2, 3, 4], sounds=("played",))
+expect(B, [1], sounds=("played",))
+expect(C, [2], sounds=("played",))
 expect(D, [])
 expect(E, [3], sounds=("silent",))
+expect(F, [4], sounds=("played",))
+print(f"  {names[F]:<13} due +5 min while still playing: {'let the first finish' if busy.get(F) == [5] else 'NOT handled'}")
+if busy.get(F) != [5]:
+    problems.append(f"the long sound's second ring should have been let go while the first played; busy: {busy.get(F)}")
+if set(busy) - {F}:
+    problems.append(f"other alarms were let go as busy: {[names.get(a, a) for a in set(busy) - {F}]}")
 if B not in offs:
     problems.append("the one-off alarm didn't switch itself off")
 saved = {a["id"]: a for a in json.load(open(alarms_path))}
@@ -57,4 +65,5 @@ if problems:
     for problem in problems:
         print("  -", problem)
     sys.exit(1)
-print("Live test: every ring came on time, the one-off switched itself off, the switched-off alarm stayed quiet.")
+print("Live test: every ring came on time, the one-off switched itself off, the switched-off alarm stayed quiet,")
+print("and a sound longer than its gap finished without piling up rings.")

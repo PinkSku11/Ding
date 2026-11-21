@@ -179,6 +179,26 @@ do {
     check(zip(times, times.dropFirst()).allSatisfy { $0 < $1 }, "fall-back night: times only move forward")
 }
 
+// MARK: A ring that's due while you save another alarm still rings, unless its own alarm changed
+
+do {
+    var water = repeating(9 * 60, 23 * 60, every: 15, days: everyDay)
+    let due = at(india, 2026, 11, 23, 10, 15)
+    check(Schedule.rings(water, at: due, calendar: india), "10:15 is one of its rings")
+    check(!Schedule.rings(water, at: at(india, 2026, 11, 23, 10, 16), calendar: india), "10:16 isn't")
+    check(!Schedule.rings(water, at: at(india, 2026, 11, 22, 23, 15), calendar: india), "nor after Until")
+    water.fromMinute = 9 * 60 + 5                                                      // edited: now :05, :20, :35, :50
+    check(!Schedule.rings(water, at: due, calendar: india), "after an edit, the old ring time is dropped")
+    water.isOn = false
+    check(!Schedule.rings(water, at: at(india, 2026, 11, 23, 10, 20), calendar: india), "an alarm that's off doesn't ring")
+
+    var oneOff = once(7 * 60, days: [])
+    oneOff.oneOffDay = at(india, 2026, 11, 23)
+    check(Schedule.rings(oneOff, at: at(india, 2026, 11, 23, 7), calendar: india), "one-off: today at 07:00")
+    oneOff.oneOffDay = at(india, 2026, 11, 24)                                        // saved again: moved to tomorrow
+    check(!Schedule.rings(oneOff, at: at(india, 2026, 11, 23, 7), calendar: india), "one-off moved to tomorrow")
+}
+
 // MARK: Keeping the Mac awake
 
 do {
@@ -198,12 +218,16 @@ do {
     check(Format.every(repeating(0, 60, every: 15, days: everyDay)) == "Every 15 min", "every 15")
     check(Format.every(repeating(0, 60, every: 1, unit: .hours, days: everyDay)) == "Every hour", "every hour")
     check(Format.every(repeating(0, 60, every: 2, unit: .hours, days: everyDay)) == "Every 2 hours", "every 2 hours")
-    check(Format.every(repeating(0, 60, every: 0, days: everyDay)) == "Every 1 min", "every 0")
+    check(Format.every(repeating(0, 60, every: 1, days: everyDay)) == "Every minute", "every 1 minute")
+    check(Format.every(repeating(0, 60, every: 0, days: everyDay)) == "Every minute", "every 0")
 
     check(Format.days(once(60, days: everyDay)) == "Daily", "daily")
-    check(Format.days(once(60, days: weekdays)) == "Mon–Fri", "Mon–Fri: \(Format.days(once(60, days: weekdays)))")
-    check(Format.days(once(60, days: [1, 7])) == "Sat, Sun", "Sat, Sun: \(Format.days(once(60, days: [1, 7])))")
+    check(Format.days(once(60, days: weekdays)) == "Weekdays", "Mon–Fri: \(Format.days(once(60, days: weekdays)))")
+    check(Format.days(once(60, days: [1, 7])) == "Weekends", "Sat, Sun: \(Format.days(once(60, days: [1, 7])))")
     check(Format.days(once(60, days: [2, 4, 6])) == "Mon, Wed, Fri", "Mon, Wed, Fri: \(Format.days(once(60, days: [2, 4, 6])))")
+    let sixDays = Format.days(once(60, days: [1, 2, 3, 4, 5, 6]))
+    check(sixDays == "Sun, Mon, Tue, Wed, Thu, Fri" || sixDays == "Mon, Tue, Wed, Thu, Fri, Sun",
+          "six days, in the order the week starts: \(sixDays)")
 
     var today = once(23 * 60 + 59, days: [])
     today.oneOffDay = Date()
@@ -217,7 +241,7 @@ do {
     let line = Format.subtitle(water)
     check(line.hasPrefix("Every 15 min · ") && line.hasSuffix(" · Daily") && line.contains("–"), "repeating subtitle: \(line)")
     let allDay = Format.subtitle(repeating(9 * 60, 9 * 60, every: 30, days: weekdays))
-    check(allDay == "Every 30 min · All day · Mon–Fri", "all-day subtitle: \(allDay)")
+    check(allDay == "Every 30 min · All day · Weekdays", "all-day subtitle: \(allDay)")
     let vitamins = Format.subtitle(once(21 * 60, days: everyDay))
     check(!vitamins.contains("Once") && vitamins.hasSuffix(" · Daily"), "once subtitle: \(vitamins)")
 
@@ -246,6 +270,25 @@ do {
     check(afternoon.hasPrefix("1:05") && afternoon.uppercased().hasSuffix("PM"), "AM/PM: \(afternoon)")
     check(Format.subtitle(once(21 * 60, days: everyDay)).uppercased().contains("PM"), "AM/PM in the menu details")
     Settings.timeFormat = .system
+
+    // Following the Mac: read from the way it writes a time.
+    check(Settings.is24Hour(pattern: "HH:mm"), "HH:mm is 24-hour")
+    check(Settings.is24Hour(pattern: "H.mm"), "H.mm is 24-hour")
+    check(Settings.is24Hour(pattern: "kk:mm"), "kk:mm is 24-hour")
+    check(!Settings.is24Hour(pattern: "h:mm a"), "h:mm a is AM/PM")
+    check(!Settings.is24Hour(pattern: "a h:mm"), "a h:mm (Korean style) is AM/PM")
+    check(!Settings.is24Hour(pattern: "Bh:mm"), "Bh:mm (day periods) is AM/PM")
+    check(!Settings.is24Hour(pattern: "K:mm a"), "K:mm a is AM/PM")
+    check(Settings.is24Hour(pattern: "'h'HH:mm"), "a quoted h doesn't count")
+    check(Settings.is24Hour(pattern: "HH 'h' mm"), "HH 'h' mm is 24-hour")
+
+    // After the region or time zone changes, the formatters start afresh and still work.
+    Format.reset()
+    Settings.timeFormat = .twentyFourHour
+    check(Format.time(minute: 13 * 60 + 5) == "13:05", "24-hour after a reset: \(Format.time(minute: 13 * 60 + 5))")
+    Format.reset()
+    Settings.timeFormat = .system
+    check(!Format.time(minute: 13 * 60 + 5).isEmpty, "the Mac's own format after a reset")
 }
 
 // MARK: Saved alarms from older versions still load

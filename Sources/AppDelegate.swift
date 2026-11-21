@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if !Settings.launchedBefore {
             // First launch: open the menu once so you can see where Ding lives.
-            // "Keep Mac awake" and "Open at login" both start off.
+            // "Open at login" starts off, and so does "Keep Mac awake" in each new alarm.
             Settings.launchedBefore = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                 self?.openAlarmMenu()
@@ -74,6 +74,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
         }
+    }
+
+    /// Quitting while an alarm rings: stop it and put the Mac's volume back first.
+    func applicationWillTerminate(_ notification: Notification) {
+        Ringer.shared.stopAll()
     }
 
     /// Opening Ding again (from Spotlight, Finder or Launchpad) shows the alarm list next to the pointer,
@@ -167,7 +172,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item)
         } else {
             let header = NSMenuItem()
-            header.view = NextHeaderView(text: nextText())
+            let headerView = NextHeaderView(text: nextText())
+            header.view = headerView
             menu.addItem(header)
             let alarmsHeader = NSMenuItem()
             let addAction = { [weak self, weak menu] in
@@ -185,7 +191,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 item.view = AlarmRowView(
                     alarm: alarm,
                     detail: Format.subtitle(alarm),
-                    onToggle: { on in AlarmStore.shared.setOn(id, on) },
+                    onToggle: { [weak self, weak headerView] on in
+                        AlarmStore.shared.setOn(id, on)
+                        if let self { headerView?.setText(self.nextText()) }
+                        return AlarmStore.shared.alarm(id).map(Format.subtitle)
+                    },
                     onOpen: { [weak self, weak menu] in
                         let anchor = menu?.items.first?.view?.window?.frame
                         menu?.cancelTracking()
@@ -257,18 +267,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleOpenAtLogin() {
         let service = SMAppService.mainApp
+        let turningOn = service.status != .enabled
         do {
-            if service.status == .enabled {
-                try service.unregister()
-            } else {
+            if turningOn {
                 try service.register()
+            } else {
+                try service.unregister()
             }
         } catch {
-            let alert = NSAlert()
-            alert.messageText = "Couldn't change Open at login"
-            alert.informativeText = "You can add Ding yourself in System Settings → General → Login Items."
-            NSApp.activate()
-            alert.runModal()
+            showLoginItemsHelp(
+                "Ding couldn't turn \(turningOn ? "on" : "off") Open at login",
+                "You can turn it \(turningOn ? "on" : "off") yourself in System Settings, under General → \(loginItemsPane).")
+            return
+        }
+        if turningOn && service.status == .requiresApproval {
+            showLoginItemsHelp(
+                "Allow Ding to open at login",
+                "Turn on Ding in System Settings, under General → \(loginItemsPane).")
+        }
+    }
+
+    private var loginItemsPane: String {
+        if #available(macOS 15.0, *) { return "Login Items & Extensions" }
+        return "Login Items"
+    }
+
+    private func showLoginItemsHelp(_ message: String, _ details: String) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = details
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate()
+        if alert.runModal() == .alertFirstButtonReturn {
+            SMAppService.openSystemSettingsLoginItems()
         }
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import UniformTypeIdentifiers
 
 struct SoundOption: Identifiable, Hashable {
@@ -55,8 +56,16 @@ enum SoundLibrary {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = "Choose a sound for your alarm"
+        panel.prompt = "Choose"
         NSApp.activate()
         guard panel.runModal() == .OK, let source = panel.url else { return nil }
+
+        // A file Ding can't play would make the alarm silent, so check it first.
+        guard let player = try? AVAudioPlayer(contentsOf: source), player.duration > 0 else {
+            tell("Ding can't play “\(source.lastPathComponent)”",
+                 "The file may be damaged, or in a format Ding can't read. Try a different sound file.")
+            return nil
+        }
 
         let folder = customFolder
         let base = source.deletingPathExtension().lastPathComponent
@@ -70,8 +79,16 @@ enum SoundLibrary {
         do {
             try FileManager.default.copyItem(at: source, to: destination)
         } catch {
+            tell("Ding couldn't add “\(source.lastPathComponent)”", error.localizedDescription)
             return nil
         }
         return "custom:" + destination.lastPathComponent
+    }
+
+    private static func tell(_ message: String, _ details: String) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = details
+        alert.runModal()
     }
 }

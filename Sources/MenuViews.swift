@@ -50,13 +50,13 @@ enum MenuMetrics {
 
 final class NextHeaderView: NSView {
     private let divider = NSView()
+    private let label = NSTextField(labelWithString: "")
 
     init(text: String) {
         let width = MenuMetrics.width
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 34))
         autoresizingMask = [.width]
 
-        let label = NSTextField(labelWithString: "")
         label.lineBreakMode = .byTruncatingTail
         label.attributedStringValue = NextHeaderView.styled(text)
         label.frame = NSRect(x: MenuMetrics.labelX, y: 14,
@@ -74,6 +74,11 @@ final class NextHeaderView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
+    }
+
+    /// Updates the line while the menu is open (after an alarm is switched on or off).
+    func setText(_ text: String) {
+        label.attributedStringValue = NextHeaderView.styled(text)
     }
 
     /// "Next:" softer, the alarm and its time in the normal text colour so they stand out.
@@ -224,10 +229,10 @@ final class AlarmRowView: NSView {
     private var hovering = false {
         didSet { updateBubble() }
     }
-    private let onToggle: (Bool) -> Void
+    private let onToggle: (Bool) -> String?   // saves the switch; returns the alarm's details as they are now
     private let onOpen: () -> Void
 
-    init(alarm: Alarm, detail: String, onToggle: @escaping (Bool) -> Void, onOpen: @escaping () -> Void) {
+    init(alarm: Alarm, detail: String, onToggle: @escaping (Bool) -> String?, onOpen: @escaping () -> Void) {
         self.onToggle = onToggle
         self.onOpen = onOpen
         toggle = MenuSwitch(isOn: alarm.isOn)
@@ -298,8 +303,11 @@ final class AlarmRowView: NSView {
     private func switched(_ on: Bool) {
         updateName(on: on)
         // Save once the knob has settled, so nothing on the main thread interrupts the animation.
+        // A one-time alarm's details change too ("One time" becomes "Today only").
         let save = onToggle
-        let timer = Timer(timeInterval: 0.35, repeats: false) { _ in save(on) }
+        let timer = Timer(timeInterval: 0.35, repeats: false) { [weak self] _ in
+            if let detail = save(on) { self?.detailLabel.stringValue = detail }
+        }
         RunLoop.main.add(timer, forMode: .common)
     }
 

@@ -65,6 +65,11 @@ enum Schedule {
         return best
     }
 
+    /// Whether the alarm, as it's set now, rings at `date`.
+    static func rings(_ alarm: Alarm, at date: Date, calendar: Calendar = .current) -> Bool {
+        nextRing(for: alarm, after: date.addingTimeInterval(-1), calendar: calendar) == date
+    }
+
     /// The day a one-off alarm rings on: the first occurrence that still has a ring ahead.
     static func oneOffDay(for alarm: Alarm, now: Date, calendar: Calendar = .current) -> Date {
         let today = calendar.startOfDay(for: now)
@@ -96,6 +101,13 @@ enum Schedule {
 
 enum Format {
     private static var timeFormatters: [TimeFormat: DateFormatter] = [:]
+    private static var savedWeekdayFormatter: DateFormatter?
+
+    /// Starts the formatters afresh, after the region, the clock or the time zone changes.
+    static func reset() {
+        timeFormatters = [:]
+        savedWeekdayFormatter = nil
+    }
 
     /// Times as the Mac shows them, or in the 24-hour / AM/PM style picked in Ding's right-click menu.
     private static var timeFormatter: DateFormatter {
@@ -113,11 +125,14 @@ enum Format {
         return formatter
     }
 
-    private static let weekdayFormatter: DateFormatter = {
+    /// Short day names: "Mon".
+    private static var weekdayFormatter: DateFormatter {
+        if let formatter = savedWeekdayFormatter { return formatter }
         let formatter = DateFormatter()
         formatter.setLocalizedDateFormatFromTemplate("EEE")
+        savedWeekdayFormatter = formatter
         return formatter
-    }()
+    }
 
     static func time(_ date: Date) -> String {
         timeFormatter.string(from: date)
@@ -146,7 +161,7 @@ enum Format {
         return "on \(weekdayFormatter.string(from: date)) at \(time(date))"
     }
 
-    /// The notification's last line: "Next at 21:00", "Next tomorrow at 09:00", "Next Mon at 10:00"
+    /// The notification's last line: "Next at 21:00", "Next tomorrow at 09:00", "Next on Mon at 10:00"
     static func nextLine(_ date: Date, from now: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDate(date, inSameDayAs: now) { return "Next at \(time(date))" }
@@ -159,7 +174,7 @@ enum Format {
     static func every(_ alarm: Alarm) -> String {
         let n = max(1, alarm.every)
         switch alarm.everyUnit {
-        case .minutes: return "Every \(n) min"
+        case .minutes: return n == 1 ? "Every minute" : "Every \(n) min"
         case .hours: return n == 1 ? "Every hour" : "Every \(n) hours"
         }
     }
@@ -176,8 +191,8 @@ enum Format {
         let days = alarm.days
         let symbols = calendar.shortWeekdaySymbols   // index 0 is Sunday
         if days.count == 7 { return "Daily" }
-        if days == Set([2, 3, 4, 5, 6]) { return "\(symbols[1])–\(symbols[5])" }
-        if days == Set([1, 7]) { return "\(symbols[6]), \(symbols[0])" }
+        if days == Set([2, 3, 4, 5, 6]) { return "Weekdays" }
+        if days == Set([1, 7]) { return "Weekends" }
         let order = (0..<7).map { (calendar.firstWeekday - 1 + $0) % 7 + 1 }
         return order.filter { days.contains($0) }.map { symbols[$0 - 1] }.joined(separator: ", ")
     }

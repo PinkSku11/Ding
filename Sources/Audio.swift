@@ -19,22 +19,28 @@ enum SystemAudio {
         return status == noErr && device != 0 ? device : nil
     }
 
-    private static var outputDevice: AudioObjectID? { defaultDevice(kAudioHardwarePropertyDefaultOutputDevice) }
+    /// Where sound plays right now: the speakers, headphones, a display…
+    static var outputDevice: AudioObjectID? { defaultDevice(kAudioHardwarePropertyDefaultOutputDevice) }
     private static var inputDevice: AudioObjectID? { defaultDevice(kAudioHardwarePropertyDefaultInputDevice) }
 
-    private static func readUInt32(_ device: AudioObjectID,
+    private static func readUInt32(_ object: AudioObjectID,
                                    _ selector: AudioObjectPropertySelector,
                                    _ scope: AudioObjectPropertyScope) -> UInt32? {
         var addr = address(selector, scope)
-        guard AudioObjectHasProperty(device, &addr) else { return nil }
+        guard AudioObjectHasProperty(object, &addr) else { return nil }
         var value = UInt32(0)
         var size = UInt32(MemoryLayout<UInt32>.size)
-        return AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &value) == noErr ? value : nil
+        return AudioObjectGetPropertyData(object, &addr, 0, nil, &size, &value) == noErr ? value : nil
     }
 
-    /// The Mac's output volume, 0…1.
-    static func volume() -> Float? {
-        guard let device = outputDevice else { return nil }
+    private static func isSettable(_ device: AudioObjectID, _ addr: inout AudioObjectPropertyAddress) -> Bool {
+        guard AudioObjectHasProperty(device, &addr) else { return false }
+        var settable: DarwinBoolean = false
+        return AudioObjectIsPropertySettable(device, &addr, &settable) == noErr && settable.boolValue
+    }
+
+    /// A device's output volume, 0…1, or nil if it has no volume control.
+    static func volume(of device: AudioObjectID) -> Float? {
         var addr = address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume, kAudioDevicePropertyScopeOutput)
         guard AudioObjectHasProperty(device, &addr) else { return nil }
         var value = Float32(0)
@@ -42,33 +48,61 @@ enum SystemAudio {
         return AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &value) == noErr ? Float(value) : nil
     }
 
-    static func setVolume(_ level: Float) {
-        guard let device = outputDevice else { return }
+    /// Whether Ding can change a device's volume. Some displays and speakers have a fixed volume.
+    static func canSetVolume(of device: AudioObjectID) -> Bool {
         var addr = address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume, kAudioDevicePropertyScopeOutput)
-        guard AudioObjectHasProperty(device, &addr) else { return }
+        return isSettable(device, &addr)
+    }
+
+    static func setVolume(_ level: Float, of device: AudioObjectID) {
+        var addr = address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume, kAudioDevicePropertyScopeOutput)
+        guard isSettable(device, &addr) else { return }
         var value = Float32(max(0, min(1, level)))
         _ = AudioObjectSetPropertyData(device, &addr, 0, nil, UInt32(MemoryLayout<Float32>.size), &value)
     }
 
-    static func isMuted() -> Bool {
-        guard let device = outputDevice,
-              let value = readUInt32(device, kAudioDevicePropertyMute, kAudioDevicePropertyScopeOutput) else { return false }
-        return value != 0
+    static func isMuted(_ device: AudioObjectID) -> Bool {
+        readUInt32(device, kAudioDevicePropertyMute, kAudioDevicePropertyScopeOutput).map { $0 != 0 } ?? false
     }
 
-    static func setMuted(_ muted: Bool) {
-        guard let device = outputDevice else { return }
+    static func setMuted(_ muted: Bool, _ device: AudioObjectID) {
         var addr = address(kAudioDevicePropertyMute, kAudioDevicePropertyScopeOutput)
-        guard AudioObjectHasProperty(device, &addr) else { return }
+        guard isSettable(device, &addr) else { return }
         var value = UInt32(muted ? 1 : 0)
         _ = AudioObjectSetPropertyData(device, &addr, 0, nil, UInt32(MemoryLayout<UInt32>.size), &value)
     }
 
-    /// True while an app is using the microphone, which usually means a call.
+    /// True while another app is recording from a microphone, which usually means a call.
     static func isMicrophoneInUse() -> Bool {
-        guard let device = inputDevice,
-              let running = readUInt32(device, kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioObjectPropertyScopeGlobal) else { return false }
+        if #available(macOS 14.2, *), let processes = audioProcesses() {
+            // Asks each app that uses sound whether it's recording, so playing music doesn't count.
+            let me = UInt32(bitPattern: ProcessInfo.processInfo.processIdentifier)
+            return processes.contains { process in
+                readUInt32(process, kAudioProcessPropertyIsRunningInput, kAudioObjectPropertyScopeGlobal) == 1
+                    && readUInt32(process, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal) != me
+            }
+        }
+        // Older systems: is the microphone running? Not when it's the same device as the output
+        // (AirPods, USB headsets), because playing music runs that too.
+        guard let input = inputDevice, input != outputDevice,
+              let running = readUInt32(input, kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioObjectPropertyScopeGlobal)
+        else { return false }
         return running != 0
+    }
+
+    /// Every app connected to the Mac's sound system.
+    @available(macOS 14.2, *)
+    private static func audioProcesses() -> [AudioObjectID]? {
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        var addr = address(kAudioHardwarePropertyProcessObjectList)
+        guard AudioObjectHasProperty(system, &addr) else { return nil }
+        var size = UInt32(0)
+        guard AudioObjectGetPropertyDataSize(system, &addr, 0, nil, &size) == noErr else { return nil }
+        let count = Int(size) / MemoryLayout<AudioObjectID>.size
+        if count == 0 { return [] }
+        var list = [AudioObjectID](repeating: 0, count: count)
+        guard AudioObjectGetPropertyData(system, &addr, 0, nil, &size, &list) == noErr else { return nil }
+        return Array(list.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
     }
 
     /// True when sound goes to headphones: AirPods and other Bluetooth audio, or wired headphones.
@@ -103,8 +137,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     private var notificationID: String?
     private var player: AVAudioPlayer?
     private var pending: DispatchWorkItem?
-    private var savedVolume: Float?
-    private var savedMuted: Bool?
+    private var saved: [AudioObjectID: (volume: Float?, muted: Bool)] = [:]   // each device as it was before ringing
     private var previewDone: (() -> Void)?
 
     private override init() {
@@ -113,12 +146,22 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
 
     func enqueue(_ rings: [Ring]) {
         if previewDone != nil { stopPreview() }
-        queue.append(contentsOf: rings)
+        for ring in rings {
+            // Still ringing from last time (a sound longer than the gap between rings): let that one finish,
+            // rather than piling up rings that would play on and on.
+            if current?.alarm.id == ring.alarm.id || queue.contains(where: { $0.alarm.id == ring.alarm.id }) {
+                RingLog.write("busy \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970)")
+                continue
+            }
+            queue.append(ring)
+        }
         if current == nil { playNext() }
     }
 
-    /// Stops the sound right away and clears the notification (a click on the notification or on the blue bell).
+    /// Stops the sound right away and clears the notification (a click on the notification or on the blue bell,
+    /// or quitting Ding), and puts the volume back.
     func stopAll() {
+        if previewDone != nil { stopPreview() }
         queue.removeAll()
         cancelPending()
         player?.stop()
@@ -143,7 +186,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         let played = startSound(for: ring.alarm)
         RingLog.write("ring \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970) sound \(played ? "played" : "silent")")
         if !played {
-            // No sound this time (a call, the Mac is muted, or a missing file): just show the notification.
+            // No sound this time (Sound is None, a call, or the Mac is muted): just show the notification.
             schedule(after: 5) { [weak self] in self?.ringFinished() }
         }
     }
@@ -162,22 +205,30 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     private func startSound(for alarm: Alarm) -> Bool {
         if alarm.sound.isEmpty || alarm.plays <= 0 || alarm.volume <= 0 { return false }
         if SystemAudio.isMicrophoneInUse() { return false }
-        let muted = SystemAudio.isMuted()
+        let device = SystemAudio.outputDevice
+        let muted = device.map(SystemAudio.isMuted) ?? false
         if muted && !alarm.ringWhenMuted { return false }
         guard let url = SoundLibrary.url(for: alarm.sound),
               let newPlayer = try? AVAudioPlayer(contentsOf: url) else { return false }
 
-        if savedVolume == nil && savedMuted == nil {
-            savedVolume = SystemAudio.volume()
-            savedMuted = muted
-        }
         var level = Float(alarm.volume)
         if SystemAudio.isHeadphones() { level = min(level, headphoneCap) }
-        if muted { SystemAudio.setMuted(false) }
-        SystemAudio.setVolume(level)
-
         newPlayer.delegate = self
         newPlayer.volume = 1
+        if let device {
+            if saved[device] == nil {
+                saved[device] = (SystemAudio.volume(of: device), muted)
+            }
+            if muted { SystemAudio.setMuted(false, device) }
+            if SystemAudio.canSetVolume(of: device) {
+                SystemAudio.setVolume(level, of: device)
+            } else {
+                newPlayer.volume = level   // a fixed-volume output: turn the sound itself down instead
+            }
+        } else {
+            newPlayer.volume = level
+        }
+
         let length: TimeInterval
         switch alarm.playUnit {
         case .times:
@@ -209,11 +260,13 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         }
     }
 
+    /// Puts back the volume and mute of every device Ding changed, even if you've since switched to another one.
     private func restoreVolume() {
-        if let volume = savedVolume { SystemAudio.setVolume(volume) }
-        if savedMuted == true { SystemAudio.setMuted(true) }
-        savedVolume = nil
-        savedMuted = nil
+        for (device, state) in saved {
+            if let volume = state.volume { SystemAudio.setVolume(volume, of: device) }
+            if state.muted { SystemAudio.setMuted(true, device) }
+        }
+        saved = [:]
     }
 
     private func setRinging(_ ringing: Bool) {

@@ -1,7 +1,22 @@
 # Ding
 
-A small Mac menu bar alarm: rings several times a day across a time range, or once a day, each alarm with its own sound and volume.
+A small alarm for the Mac menu bar. Each alarm rings either repeatedly (every few minutes or hours, from one time until another) or once at a set time, on the days you pick, with its own sound and volume. With no days picked, it rings one time and then switches itself off.
 
-Every push builds the app on GitHub's Mac build machines. The finished `Ding.dmg`, the build log and screenshots land on the `build` branch.
+## Installing
 
-To install: open `Ding.dmg` and drag Ding into Applications. The first time you open it, macOS says it can't verify the app. Click Done, then go to System Settings → Privacy & Security and click Open Anyway.
+1. Open `Ding.zip`. It unpacks to Ding.
+2. Drag Ding into your Applications folder, then open it.
+3. The first time, macOS says it can't check Ding for malware, because Ding isn't from the App Store. Click Done, go to System Settings → Privacy & Security, scroll down and click Open Anyway.
+
+Ding is the bell in the menu bar. Click it for your alarms. Right-click it to choose 24-hour or AM/PM times, to have Ding open at login, or to quit.
+
+## Good to know
+
+- Ding rings only while it's open, so turn on Open at login if you want it there after a restart.
+- Alarms can't ring while the Mac is asleep. Turn on "Keep Mac awake for this alarm" for the alarms that matter; it can't help when the lid is closed.
+- Ding stays quiet, and shows only the notification, while an app is using the microphone (a call), when the alarm's sound is None or its volume is 0, and when the Mac is muted, unless "Ring even when muted" is on.
+- With headphones connected, alarms play at half volume at most.
+
+## How it's built
+
+Every push builds Ding on GitHub's Mac build machines: the app for Apple silicon and Intel Macs, the scheduling tests, a live test with real alarms, and screenshots. `Ding.zip`, `Ding.dmg`, the build log and the screenshots go to the `build` branch.

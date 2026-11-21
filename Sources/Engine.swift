@@ -58,19 +58,30 @@ final class Engine: NSObject {
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(clockChanged), name: .NSSystemClockDidChange, object: nil)
         center.addObserver(self, selector: #selector(clockChanged), name: .NSSystemTimeZoneDidChange, object: nil)
+        center.addObserver(self, selector: #selector(clockChanged), name: NSLocale.currentLocaleDidChangeNotification, object: nil)
     }
 
+    /// The clock, the time zone or the region changed: work out the times on screen and the next rings again.
     @objc private func clockChanged() {
-        recompute()
+        DispatchQueue.main.async { [weak self] in
+            Format.reset()
+            self?.recompute()
+        }
     }
 
-    /// Rebuilds every alarm's next ring from now. Anything that was due in between is skipped.
+    /// Rebuilds every alarm's next ring from now.
     func recompute() {
         let now = Date()
+        let previous = due
         due = [:]
         var finished: [UUID] = []
         for alarm in AlarmStore.shared.alarms where alarm.isOn {
-            if let time = Schedule.nextRing(for: alarm, after: now) {
+            if let pending = previous[alarm.id], pending <= now, now.timeIntervalSince(pending) <= 60,
+               Schedule.rings(alarm, at: pending) {
+                // Due a moment ago, but not rung yet: another alarm was saved or switched in that same second.
+                // Keep it so it still rings, unless this alarm itself was changed and no longer rings then.
+                due[alarm.id] = pending
+            } else if let time = Schedule.nextRing(for: alarm, after: now) {
                 due[alarm.id] = time
             } else if alarm.isOneOff {
                 finished.append(alarm.id)
@@ -95,10 +106,6 @@ final class Engine: NSObject {
             }
         }
         return best
-    }
-
-    func settingsChanged() {
-        updateKeepAwake(Date())
     }
 
     private func tick() {
@@ -136,7 +143,8 @@ final class Engine: NSObject {
         }
     }
 
-    /// "Keep Mac awake for alarms": no idle sleep while an alarm's time range is running.
+    /// "Keep Mac awake for this alarm": no idle sleep while that alarm's time range is running,
+    /// or in the few minutes before it rings once.
     private func updateKeepAwake(_ now: Date) {
         let wanted = AlarmStore.shared.alarms.contains { $0.keepAwake && Schedule.wantsMacAwake($0, at: now) }
         if wanted, sleepBlocker == nil {

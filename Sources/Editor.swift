@@ -120,17 +120,21 @@ struct EditorView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "speaker.fill")
                                 .foregroundStyle(.secondary)
-                            Slider(value: $model.alarm.volume, in: 0...1)
-                                .frame(width: 210)
+                                .accessibilityHidden(true)
+                            Slider(value: $model.alarm.volume, in: 0...1, onEditingChanged: { editing in
+                                if !editing { playAtNewVolume() }   // let go: hear how loud it is
+                            })
+                            .frame(width: 210)
                             Image(systemName: "speaker.wave.3.fill")
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                         }
                     }
 
                     Toggle("Ring even when muted", isOn: $model.alarm.ringWhenMuted)
                         .toggleStyle(.switch)
 
-                    Toggle("Keep Mac awake", isOn: $model.alarm.keepAwake)
+                    Toggle("Keep Mac awake for this alarm", isOn: $model.alarm.keepAwake)
                         .toggleStyle(.switch)
                 }
             }
@@ -143,7 +147,7 @@ struct EditorView: View {
 
             HStack(spacing: 8) {
                 if model.confirmingDelete {
-                    Text(verbatim: "Delete \(model.alarm.displayName)?")
+                    Text(verbatim: "Delete “\(model.alarm.displayName)”?")
                         .font(.system(size: 13, weight: .semibold))
                         .padding(.leading, 10)
                     Spacer()
@@ -162,6 +166,7 @@ struct EditorView: View {
                     }
                     Button("Cancel", action: onCancel)
                     Button("Save", action: onSave)
+                        .keyboardShortcut(.defaultAction)   // Return saves, like other Mac windows
                         .disabled(!model.canSave)
                 }
             }
@@ -213,21 +218,29 @@ struct EditorView: View {
         )
     }
 
-    /// Plays the chosen sound right away, the way the alarm is set to play it.
-    /// While Play sound or Volume are still 0, it plays once at half volume so you can hear it.
+    /// Plays the sound you just picked, once, at the alarm's volume.
+    /// While Volume is still at 0 (a new alarm), it plays at half volume so you can hear it.
     private func playSample() {
         guard !model.alarm.sound.isEmpty else {
             Ringer.shared.stopPreview()
             return
         }
         var sample = model.alarm
-        if sample.plays <= 0 {
-            sample.plays = 1
-            sample.playUnit = .times
+        sample.plays = 1
+        sample.playUnit = .times
+        if sample.volume <= 0 { sample.volume = 0.5 }
+        Ringer.shared.preview(sample) {}
+    }
+
+    /// After you let go of the volume slider: the sound once, at the new volume (nothing at 0).
+    private func playAtNewVolume() {
+        guard !model.alarm.sound.isEmpty, model.alarm.volume > 0 else {
+            Ringer.shared.stopPreview()
+            return
         }
-        if sample.volume <= 0 {
-            sample.volume = 0.5
-        }
+        var sample = model.alarm
+        sample.plays = 1
+        sample.playUnit = .times
         Ringer.shared.preview(sample) {}
     }
 }
@@ -255,14 +268,14 @@ struct NumberField: View {
     }
 }
 
-// MARK: - "Several times a day" / "Once a day", each in its own bubble like the days
+// MARK: - Rings "Repeatedly" / "Once", each in its own bubble like the days
 
 struct KindPicker: View {
     @Binding var kind: AlarmKind?
 
     var body: some View {
         HStack(spacing: 6) {
-            pill("Repeating", .repeating)
+            pill("Repeatedly", .repeating)
             pill("Once", .once)
         }
     }
@@ -301,7 +314,6 @@ struct DaysPicker: View {
         HStack(spacing: 5) {
             ForEach(order, id: \.self) { day in
                 let on = days.contains(day)
-                let state: String = on ? "On" : "Off"
                 Button {
                     if on {
                         days.remove(day)
@@ -318,7 +330,7 @@ struct DaysPicker: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(names[day - 1])
-                .accessibilityValue(state)
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
     }
@@ -379,7 +391,7 @@ final class EditorController: NSObject {
         self.hosting = hosting
         panel.contentView = EditorController.background(around: hosting)
         panel.onEscape = { [weak self] in self?.close() }
-        // Switching between "Several times a day" and "Once a day" changes the height; keep the top in place.
+        // Switching between Repeatedly and Once changes the height; keep the top in place.
         kindWatcher = model.$kind.dropFirst().sink { [weak self] _ in
             DispatchQueue.main.async { self?.fit() }
         }

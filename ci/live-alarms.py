@@ -11,7 +11,7 @@ now = time.time()
 local = time.localtime(now)
 minute_now = local.tm_hour * 60 + local.tm_min
 first_minute = minute_now + (2 if local.tm_sec > 40 else 1)   # leave Ding time to start
-if first_minute + 4 >= 24 * 60:
+if first_minute + 5 >= 24 * 60:
     sys.exit(0)
 first_epoch = (int(now) // 60 + (first_minute - minute_now)) * 60
 apple_epoch = now - 978307200                                    # dates are saved as seconds since 2001
@@ -30,6 +30,9 @@ alarms = [
          fromMinute=first_minute, untilMinute=first_minute + 4, isOn=False),
     dict(base, id="00000000-0000-4000-8000-0000000000E5", name="Silent", kind="once",
          timeMinute=first_minute + 3, sound=""),
+    # Plays for 70 seconds but is due every minute: the second ring comes while the first is still playing.
+    dict(base, id="00000000-0000-4000-8000-0000000000F6", name="Long sound", kind="repeating",
+         fromMinute=first_minute + 4, untilMinute=first_minute + 5, plays=70, playUnit="seconds"),
 ]
 json.dump(alarms, open(sys.argv[1], "w"), indent=2)
 print(first_epoch)

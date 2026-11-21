@@ -3,8 +3,8 @@ import Foundation
 // MARK: - Alarm
 
 enum AlarmKind: String, Codable {
-    case repeating   // "Several times a day"
-    case once        // "Once a day"
+    case repeating   // Rings "Repeatedly": every few minutes or hours, from one time until another
+    case once        // Rings "Once": at one time
 }
 
 enum IntervalUnit: String, Codable {
@@ -218,7 +218,7 @@ final class AlarmStore {
 // MARK: - Settings
 
 enum TimeFormat: String {
-    case system                      // follow the Mac (as before you choose)
+    case system                      // follow the Mac, until you pick one in the right-click menu
     case twelveHour = "12"           // 9:00 PM
     case twentyFourHour = "24"       // 21:00
 }
@@ -235,9 +235,24 @@ enum Settings {
         case .twentyFourHour: return true
         case .twelveHour: return false
         case .system:
-            let format = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
-            return !format.contains("a")
+            // The way the Mac itself shows a time, including the 24-hour switch in Date & Time settings.
+            let formatter = DateFormatter()
+            formatter.dateStyle = .none
+            formatter.timeStyle = .short
+            return is24Hour(pattern: formatter.dateFormat ?? "")
         }
+    }
+
+    /// Whether a time pattern such as "HH:mm" or "h:mm a" shows a 24-hour clock.
+    static func is24Hour(pattern: String) -> Bool {
+        var quoted = false
+        for character in pattern {
+            if character == "'" { quoted.toggle(); continue }   // 'text in quotes' is printed as it is
+            if quoted { continue }
+            if character == "H" || character == "k" { return true }    // 0–23 or 1–24
+            if character == "h" || character == "K" { return false }   // 1–12 or 0–11
+        }
+        return false
     }
 
     /// Your locale, with the hour style you picked.
