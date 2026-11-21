@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 // MARK: - Editing state
@@ -7,6 +8,8 @@ final class EditorModel: ObservableObject {
     @Published var alarm: Alarm
     @Published var kind: AlarmKind?          // nothing chosen yet for a new alarm
     @Published var previewing = false
+    @Published var confirmingDelete = false
+    var choosingFile = false                 // the file chooser is open; don't close on outside clicks
     let isNew: Bool
 
     init(alarm: Alarm, isNew: Bool) {
@@ -42,6 +45,12 @@ struct EditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Text(verbatim: model.isNew ? "New alarm" : "Edit alarm")
+                .font(.system(size: 13, weight: .semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 30)
+                .padding(.top, 16)
+
             Form {
                 Section {
                     TextField("Name", text: $model.alarm.name, prompt: Text("Alarm"))
@@ -137,18 +146,32 @@ struct EditorView: View {
                 }
             }
             .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
             .frame(height: formHeight)
 
             HStack(spacing: 8) {
-                Spacer()
-                if !model.isNew {
+                if model.confirmingDelete {
+                    Text(verbatim: "Delete \(model.alarm.displayName)?")
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.leading, 10)
+                    Spacer()
+                    Button("Cancel") { model.confirmingDelete = false }
                     Button(role: .destructive, action: onDelete) {
                         Text("Delete").foregroundStyle(.red)
                     }
+                } else {
+                    Spacer()
+                    if !model.isNew {
+                        Button(role: .destructive) {
+                            model.confirmingDelete = true
+                        } label: {
+                            Text("Delete").foregroundStyle(.red)
+                        }
+                    }
+                    Button("Cancel", action: onCancel)
+                    Button("Save", action: onSave)
+                        .disabled(!model.canSave)
                 }
-                Button("Cancel", action: onCancel)
-                Button("Save", action: onSave)
-                    .disabled(!model.canSave)
             }
             .padding(.horizontal, 20)
             .padding(.top, 0)
@@ -184,7 +207,10 @@ struct EditorView: View {
                 let current = model.alarm.sound
                 model.alarm.sound = current
                 DispatchQueue.main.async {
-                    if let id = SoundLibrary.addFile() {
+                    model.choosingFile = true
+                    let id = SoundLibrary.addFile()
+                    model.choosingFile = false
+                    if let id {
                         customSounds = SoundLibrary.custom()
                         model.alarm.sound = id
                     }
@@ -269,36 +295,171 @@ struct DaysPicker: View {
     }
 }
 
-// MARK: - Window
+// MARK: - The panel that drops down from the bell, where the alarm list was
 
-final class EditorWindowController: NSWindowController, NSWindowDelegate {
+final class EditorPanel: NSPanel {
+    var onEscape: (() -> Void)?
+
+    init() {
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 520, height: 400),
+                   styleMask: [.borderless],
+                   backing: .buffered,
+                   defer: false)
+        isFloatingPanel = true
+        level = .floating
+        hidesOnDeactivate = false
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        isMovable = false
+        isReleasedWhenClosed = false
+        collectionBehavior = [.moveToActiveSpace, .transient, .ignoresCycle, .fullScreenAuxiliary]
+    }
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        onEscape?()
+    }
+}
+
+final class EditorController: NSObject {
     var onFinish: (() -> Void)?
+    private(set) var isOpen = false
     private let model: EditorModel
+    private let panel = EditorPanel()
+    private var hosting: NSHostingView<EditorView>!
+    private var anchorTop: CGFloat = 0
+    private var mouseMonitor: Any?
+    private var resignObserver: NSObjectProtocol?
+    private var kindWatcher: AnyCancellable?
 
     init(alarm: Alarm, isNew: Bool) {
         model = EditorModel(alarm: alarm, isNew: isNew)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 540),
-                              styleMask: [.titled, .closable],
-                              backing: .buffered,
-                              defer: false)
-        window.title = isNew ? "New alarm" : "Edit alarm"
-        window.isReleasedWhenClosed = false
-        super.init(window: window)
-
+        super.init()
         let view = EditorView(model: model,
                               onSave: { [weak self] in self?.save() },
                               onCancel: { [weak self] in self?.close() },
-                              onDelete: { [weak self] in self?.confirmDelete() })
-        let hosting = NSHostingController(rootView: view)
-        hosting.sizingOptions = [.preferredContentSize]
-        window.contentViewController = hosting
-        window.setContentSize(hosting.view.fittingSize)
-        window.delegate = self
-        window.center()
+                              onDelete: { [weak self] in self?.delete() })
+        let hosting = NSHostingView(rootView: view)
+        self.hosting = hosting
+        panel.contentView = EditorController.background(around: hosting)
+        panel.onEscape = { [weak self] in self?.close() }
+        // Switching between "Several times a day" and "Once a day" changes the height; keep the top in place.
+        kindWatcher = model.$kind.dropFirst().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.fit() }
+        }
     }
 
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not supported")
+    /// The same glass as the menu (macOS 26 and later), or the menu material on older systems.
+    private static func background(around content: NSView) -> NSView {
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = 12
+            glass.contentView = content
+            return glass
+        }
+        let effect = NSVisualEffectView()
+        effect.material = .menu
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 12
+        effect.layer?.masksToBounds = true
+        content.frame = effect.bounds
+        content.autoresizingMask = [.width, .height]
+        effect.addSubview(content)
+        return effect
+    }
+
+    /// Opens with its top-left corner where the alarm list was (`anchor`, the list's frame on screen),
+    /// or right under the bell when there's no list.
+    func show(anchor: NSRect?, below button: NSStatusBarButton?) {
+        let size = fittingSize()
+        let screen = button?.window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let visible = screen.visibleFrame
+        var x = visible.maxX - size.width - 8
+        var top = visible.maxY - 1
+        if let anchor {
+            x = anchor.minX
+            top = anchor.maxY
+        } else if let button, let barWindow = button.window {
+            let buttonRect = barWindow.convertToScreen(button.convert(button.bounds, to: nil))
+            x = buttonRect.minX - 4
+            top = barWindow.frame.minY - 1
+        }
+        x = min(max(x, visible.minX + 8), visible.maxX - size.width - 8)
+        top = min(top, visible.maxY)
+        anchorTop = top
+        panel.setFrame(NSRect(x: x, y: top - size.height, width: size.width, height: size.height), display: true)
+
+        isOpen = true
+        watchForOutsideClicks()
+        NSApp.activate()
+        panel.makeKeyAndOrderFront(nil)
+        panel.invalidateShadow()
+        DispatchQueue.main.async { [weak self] in self?.panel.invalidateShadow() }
+        if !model.isNew {
+            // Opening an existing alarm shouldn't select its name, so a stray key press can't replace it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.panel.makeFirstResponder(nil)
+            }
+        }
+    }
+
+    private func fittingSize() -> NSSize {
+        hosting.layoutSubtreeIfNeeded()
+        let size = hosting.fittingSize
+        return NSSize(width: ceil(size.width), height: ceil(size.height))
+    }
+
+    private func fit() {
+        guard isOpen else { return }
+        let size = fittingSize()
+        var frame = panel.frame
+        frame.origin.y = anchorTop - size.height
+        frame.size = size
+        panel.setFrame(frame, display: true)
+        panel.invalidateShadow()
+    }
+
+    /// Like the menu: a click anywhere else, or switching to another app, closes it.
+    private func watchForOutsideClicks() {
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+            self?.closeFromOutside()
+        }
+        resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
+                                                                object: nil, queue: .main) { [weak self] _ in
+            self?.closeFromOutside()
+        }
+    }
+
+    private func stopWatching() {
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseMonitor = nil
+        }
+        if let observer = resignObserver {
+            NotificationCenter.default.removeObserver(observer)
+            resignObserver = nil
+        }
+    }
+
+    private func closeFromOutside() {
+        if model.choosingFile { return }
+        close()
+    }
+
+    func close(restoreFocus: Bool = true) {
+        guard isOpen else { return }
+        isOpen = false
+        stopWatching()
+        Ringer.shared.stopPreview()
+        panel.orderOut(nil)
+        // Give the keyboard back to the app you were using, the way a menu does.
+        if restoreFocus && NSApp.isActive { NSApp.hide(nil) }
+        onFinish?()
     }
 
     private func save() {
@@ -316,32 +477,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         close()
     }
 
-    private func confirmDelete() {
-        guard let window else { return }
-        let alert = NSAlert()
-        alert.messageText = "Delete \(model.alarm.displayName)?"
-        let deleteButton = alert.addButton(withTitle: "Delete")
-        deleteButton.hasDestructiveAction = true
-        alert.addButton(withTitle: "Cancel")
-        let id = model.alarm.id
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }
-            AlarmStore.shared.delete(id)
-            self?.close()
-        }
-    }
-
-    override func showWindow(_ sender: Any?) {
-        super.showWindow(sender)
-        guard !model.isNew else { return }   // a new alarm starts with the cursor in Name
-        // Opening an existing alarm shouldn't select its name, so a stray key press can't replace it.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.window?.makeFirstResponder(nil)
-        }
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        Ringer.shared.stopPreview()
-        onFinish?()
+    private func delete() {
+        AlarmStore.shared.delete(model.alarm.id)
+        close()
     }
 }

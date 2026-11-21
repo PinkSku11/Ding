@@ -54,6 +54,7 @@ enum SoundLibrary {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = "Choose a sound for your alarm"
+        NSApp.activate()
         guard panel.runModal() == .OK, let source = panel.url else { return nil }
 
         let folder = customFolder

@@ -3,7 +3,8 @@ import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
-    private var editor: EditorWindowController?
+    private var editor: EditorController?
+    private var lastAddAction: (() -> Void)?   // the + in the most recent alarm list (used by the build machine's test)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if UserDefaults.standard.bool(forKey: "DingDark") {   // build machine screenshots only
@@ -40,6 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 switch show {
                 case "menu": self?.openAlarmMenu()
                 case "options": self?.openMenu(self?.buildOptionsMenu())
+                case "menu-plus":
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.lastAddAction?() }
+                    self?.openAlarmMenu()
                 case "editor": self?.openEditor(AlarmStore.shared.alarms.first?.id)
                 case "new": self?.openEditor(nil)
                 default: break
@@ -74,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func statusItemClicked(_ sender: Any?) {
         if Ringer.shared.isRinging {
             Ringer.shared.stopAll()
+            return
+        }
+        if let editor, editor.isOpen {
+            editor.close()
             return
         }
         let event = NSApp.currentEvent
@@ -128,8 +136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if alarms.isEmpty {
             let item = NSMenuItem()
             item.view = EmptyStateView { [weak self, weak menu] in
+                let anchor = menu?.items.first?.view?.window?.frame
                 menu?.cancelTracking()
-                DispatchQueue.main.async { self?.openEditor(nil) }
+                DispatchQueue.main.async { self?.openEditor(nil, anchor: anchor) }
             }
             menu.addItem(item)
         } else {
@@ -137,10 +146,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             header.view = NextHeaderView(text: nextText())
             menu.addItem(header)
             let alarmsHeader = NSMenuItem()
-            alarmsHeader.view = AlarmsHeaderView { [weak self, weak menu] in
+            let addAction = { [weak self, weak menu] in
+                let anchor = menu?.items.first?.view?.window?.frame   // where the list is on screen
                 menu?.cancelTracking()
-                DispatchQueue.main.async { self?.openEditor(nil) }
+                DispatchQueue.main.async { self?.openEditor(nil, anchor: anchor) }
             }
+            lastAddAction = addAction
+            alarmsHeader.view = AlarmsHeaderView(onAdd: addAction)
             menu.addItem(alarmsHeader)
 
             for alarm in alarms {
@@ -151,8 +163,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     detail: Format.subtitle(alarm),
                     onToggle: { on in AlarmStore.shared.setOn(id, on) },
                     onOpen: { [weak self, weak menu] in
+                        let anchor = menu?.items.first?.view?.window?.frame
                         menu?.cancelTracking()
-                        DispatchQueue.main.async { self?.openEditor(id) }
+                        DispatchQueue.main.async { self?.openEditor(id, anchor: anchor) }
                     })
                 menu.addItem(item)
             }
@@ -224,8 +237,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Editor
 
-    private func openEditor(_ id: UUID?) {
-        editor?.close()
+    private func openEditor(_ id: UUID?, anchor: NSRect? = nil) {
+        editor?.close(restoreFocus: false)
         let alarm: Alarm
         let isNew: Bool
         if let id, let existing = AlarmStore.shared.alarm(id) {
@@ -237,15 +250,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                           timeMinute: 0, days: [], sound: "", plays: 0, volume: 0, ringWhenMuted: false)
             isNew = true
         }
-        let controller = EditorWindowController(alarm: alarm, isNew: isNew)
+        let controller = EditorController(alarm: alarm, isNew: isNew)
         controller.onFinish = { [weak self, weak controller] in
             if let self, self.editor === controller {
                 self.editor = nil
             }
         }
         editor = controller
-        NSApp.activate()
-        controller.showWindow(nil)
-        controller.window?.makeKeyAndOrderFront(nil)
+        controller.show(anchor: anchor, below: statusItem.button)
     }
 }
