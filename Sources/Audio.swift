@@ -175,7 +175,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         SystemAudio.setVolume(level)
 
         newPlayer.delegate = self
-        newPlayer.volume = 0
+        newPlayer.volume = 1
         switch alarm.playUnit {
         case .times:
             newPlayer.numberOfLoops = alarm.plays - 1
@@ -185,7 +185,6 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         }
         newPlayer.prepareToPlay()
         newPlayer.play()
-        newPlayer.setVolume(1, fadeDuration: 1)   // gentle start
         player = newPlayer
         return true
     }
