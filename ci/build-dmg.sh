@@ -103,6 +103,26 @@ shoot new new-alarm dark || TEST_OK=0
 shoot menu-plus new-from-menu dark || TEST_OK=0
 shoot menu menu-light || TEST_OK=0
 shoot options options dark || TEST_OK=0
+
+echo
+echo "== Click test: open the editor, close it, open it again, then click inside it"
+click_test() {   # $1: name, then extra launch arguments
+    NAME="$1"; shift
+    pkill -x Ding 2>/dev/null
+    sleep 1
+    open -n "$APP" --args -DingShow editor-cycle "$@"
+    sleep 8
+    screencapture -x "$OUT/$NAME-before.png"
+    python3 ci/click.py 917 138          # the "Once a day" button in the editor
+    sleep 2
+    screencapture -x "$OUT/$NAME-after.png"
+    pgrep -x Ding >/dev/null || echo "Ding stopped running in $NAME"
+    pkill -x Ding
+    sleep 1
+}
+click_test click-old -DingOldHide YES
+click_test click-new
+
 rm -f "$SUPPORT/alarms.json"
 shoot menu empty dark || TEST_OK=0
 [ "$TEST_OK" = 1 ] || fail "test run"

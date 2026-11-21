@@ -41,6 +41,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 switch show {
                 case "menu": self?.openAlarmMenu()
                 case "options": self?.openMenu(self?.buildOptionsMenu())
+                case "editor-cycle":   // open, close like Cancel, open again
+                    let first = AlarmStore.shared.alarms.first?.id
+                    self?.openEditor(first)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        self?.editor?.close()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            self?.openEditor(first)
+                        }
+                    }
                 case "menu-plus":
                     // A run-loop timer still fires while the list is open (a queued block would wait).
                     let press = Timer(timeInterval: 2, repeats: false) { _ in self?.lastAddAction?() }

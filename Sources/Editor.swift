@@ -326,7 +326,10 @@ final class EditorPanel: NSPanel {
 
 final class EditorController: NSObject {
     var onFinish: (() -> Void)?
-    private(set) var isOpen = false
+    private var opened = false
+    /// Open and actually on screen.
+    var isOpen: Bool { opened && panel.isVisible }
+    private var previousApp: NSRunningApplication?   // the app you were using, to hand the keyboard back to
     private let model: EditorModel
     private let panel = EditorPanel()
     private var hosting: NSHostingView<EditorView>!
@@ -394,7 +397,10 @@ final class EditorController: NSObject {
         anchorTop = top
         panel.setFrame(NSRect(x: x, y: top - size.height, width: size.width, height: size.height), display: true)
 
-        isOpen = true
+        opened = true
+        if let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
+            previousApp = front
+        }
         watchForOutsideClicks()
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
@@ -415,7 +421,7 @@ final class EditorController: NSObject {
     }
 
     private func fit() {
-        guard isOpen else { return }
+        guard opened else { return }
         let size = fittingSize()
         var frame = panel.frame
         frame.origin.y = anchorTop - size.height
@@ -452,13 +458,20 @@ final class EditorController: NSObject {
     }
 
     func close(restoreFocus: Bool = true) {
-        guard isOpen else { return }
-        isOpen = false
+        guard opened else { return }
+        opened = false
         stopWatching()
         Ringer.shared.stopPreview()
         panel.orderOut(nil)
         // Give the keyboard back to the app you were using, the way a menu does.
-        if restoreFocus && NSApp.isActive { NSApp.hide(nil) }
+        // (Hiding Ding for this, as before, left the next editor vanishing on the first click.)
+        if restoreFocus && NSApp.isActive {
+            if UserDefaults.standard.bool(forKey: "DingOldHide") {   // build machine's before/after test only
+                NSApp.hide(nil)
+            } else if let app = previousApp, !app.isTerminated {
+                app.activate(options: [])
+            }
+        }
         onFinish?()
     }
 
