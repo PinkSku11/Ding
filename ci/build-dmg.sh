@@ -60,7 +60,7 @@ fi
 echo
 echo "== Scheduling tests"
 xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SDK" \
-    -o "$WORK/schedule-tests" Sources/Models.swift Sources/Schedule.swift ci/tests/main.swift || fail "building the tests"
+    -o "$WORK/schedule-tests" Sources/Models.swift Sources/Schedule.swift Sources/Microphone.swift ci/tests/main.swift || fail "building the tests"
 TZ=Asia/Kolkata "$WORK/schedule-tests" || fail "scheduling tests"
 
 echo
@@ -371,6 +371,53 @@ shoot editor blue-editor-ampm dark || TEST_OK=0
 shoot menu blue-menu-ampm dark || TEST_OK=0
 defaults delete com.shriya.Ding timeFormat
 defaults delete -g AppleICUForce24HourTime
+
+echo
+echo "== Microphone: a call keeps Ding quiet, Siri listening for \"Hey Siri\" doesn't"
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+mkdir -p "$WORK/mic"
+if xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SDK" \
+        -o "$WORK/mic/corespeechd" ci/recorder.swift; then
+    cp "$WORK/mic/corespeechd" "$WORK/mic/Recorder"
+    MIC_LOG=/tmp/ding-mic.log; rm -f "$MIC_LOG"
+    open -n "$APP" --args -DingShow editor -DingDark YES -DingRingLog "$MIC_LOG"
+    sleep 4
+    "$WORK/mic/corespeechd" 12 > /tmp/mic-siri.txt 2>&1 &
+    SIRI=$!
+    sleep 3
+    python3 ci/click.py click $POPUP_X $POPUP_Y; sleep 0.6   # the next sound, while "corespeechd" records
+    python3 ci/click.py key down; sleep 0.15
+    python3 ci/click.py key return; sleep 1.5
+    screencapture -x "$OUT/mic-siri-listening.png"
+    wait $SIRI
+    "$WORK/mic/Recorder" 12 > /tmp/mic-call.txt 2>&1 &
+    CALL=$!
+    sleep 3
+    python3 ci/click.py click $POPUP_X $POPUP_Y; sleep 0.6   # the next sound, while "Recorder" records
+    python3 ci/click.py key down; sleep 0.15
+    python3 ci/click.py key return; sleep 1.5
+    screencapture -x "$OUT/mic-call.png"
+    wait $CALL
+    pkill -x Ding; sleep 1
+    echo "\"corespeechd\": $(cat /tmp/mic-siri.txt)"
+    echo "\"Recorder\": $(cat /tmp/mic-call.txt)"
+    awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' "$MIC_LOG" 2>/dev/null
+    FIRST=$(grep -E " preview (played|silent)" "$MIC_LOG" 2>/dev/null | sed -n 1p | awk '{ print $3 }')
+    SECOND=$(grep -E " preview (played|silent)" "$MIC_LOG" 2>/dev/null | sed -n 2p | awk '{ print $3 }')
+    if grep -q "^recorded [1-9]" /tmp/mic-siri.txt && grep -q "^recorded [1-9]" /tmp/mic-call.txt; then
+        if [ "$FIRST" = played ] && [ "$SECOND" = "silent-mic:Recorder" ]; then
+            echo "OK: the sound played while \"corespeechd\" recorded, and stayed quiet while \"Recorder\" did"
+        else
+            echo "FAIL: expected played, then silent-mic:Recorder; got '$FIRST', then '$SECOND'"
+            TEST_OK=0
+        fi
+    else
+        echo "NOTE: this Mac couldn't record from a microphone, so this check was skipped (got '$FIRST', then '$SECOND')"
+    fi
+else
+    echo "NOTE: the microphone stand-in didn't build"
+fi
+
 rm -f "$SUPPORT/alarms.json"
 [ "$TEST_OK" = 1 ] || fail "test run"
 

@@ -21,7 +21,6 @@ enum SystemAudio {
 
     /// Where sound plays right now: the speakers, headphones, a display…
     static var outputDevice: AudioObjectID? { defaultDevice(kAudioHardwarePropertyDefaultOutputDevice) }
-    private static var inputDevice: AudioObjectID? { defaultDevice(kAudioHardwarePropertyDefaultInputDevice) }
 
     private static func readUInt32(_ object: AudioObjectID,
                                    _ selector: AudioObjectPropertySelector,
@@ -72,31 +71,24 @@ enum SystemAudio {
         _ = AudioObjectSetPropertyData(device, &addr, 0, nil, UInt32(MemoryLayout<UInt32>.size), &value)
     }
 
-    /// What's recording from a microphone right now (usually a call), or nil if nothing is.
-    /// The app's name, a background program's name, or "" when it can't be told.
+    /// What's using a microphone for a call right now, or nil if nothing is: the app's name, a background
+    /// program's name, or "" when it can't be told. Siri listening in the background doesn't count.
+    /// Before macOS 14.2 a call can't be told apart from Siri listening, so there it's always nil.
     static func microphoneUser() -> String? {
-        if #available(macOS 14.2, *), let processes = audioProcesses() {
-            // Asks each app that uses sound whether it's recording, so playing music doesn't count.
-            let me = ProcessInfo.processInfo.processIdentifier
-            for process in processes
-            where readUInt32(process, kAudioProcessPropertyIsRunningInput, kAudioObjectPropertyScopeGlobal) == 1 {
-                let pid = readUInt32(process, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal)
-                    .map { pid_t(bitPattern: $0) }
-                if pid == me { continue }
-                guard let pid else { return "" }
-                if let name = NSRunningApplication(processIdentifier: pid)?.localizedName { return name }
-                var buffer = [CChar](repeating: 0, count: 256)
-                return proc_name(pid, &buffer, UInt32(buffer.count)) > 0 ? String(cString: buffer) : ""
-            }
-            return nil
+        guard #available(macOS 14.2, *), let processes = audioProcesses() else { return nil }
+        // Asks each app that uses sound whether it's recording, so playing music doesn't count.
+        let me = ProcessInfo.processInfo.processIdentifier
+        for process in processes
+        where readUInt32(process, kAudioProcessPropertyIsRunningInput, kAudioObjectPropertyScopeGlobal) == 1 {
+            let pid = readUInt32(process, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal)
+                .map { pid_t(bitPattern: $0) }
+            if pid == me { continue }
+            guard let pid else { return "" }
+            let program = Microphone.programName(pid)
+            if !Microphone.meansCall(program) { continue }
+            return NSRunningApplication(processIdentifier: pid)?.localizedName ?? program
         }
-        // Older systems: is the microphone running? Not when it's the same device as the output
-        // (AirPods, USB headsets), because playing music runs that too.
-        guard let input = inputDevice, input != outputDevice,
-              let running = readUInt32(input, kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioObjectPropertyScopeGlobal),
-              running != 0
-        else { return nil }
-        return ""
+        return nil
     }
 
     /// Every app connected to the Mac's sound system.

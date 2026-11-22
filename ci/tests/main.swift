@@ -1,5 +1,5 @@
-// Tests for when alarms ring and how they're described. Built and run by the build machine
-// together with Sources/Models.swift and Sources/Schedule.swift.
+// Tests for when alarms ring, how they're described, and what counts as a call. Built and run by the build machine
+// together with Sources/Models.swift, Sources/Schedule.swift and Sources/Microphone.swift.
 import Foundation
 
 var checks = 0
@@ -319,6 +319,21 @@ do {
           "a copy of copy 2")
     check(Alarm.copyName(of: "Alarm", taken: []) == "Alarm copy", "an unnamed alarm")
     check(Alarm.copyName(of: "Photocopy", taken: []) == "Photocopy copy", "a name that only ends in \"copy\"")
+}
+
+// MARK: What counts as a call
+
+do {
+    check(!Microphone.meansCall("corespeechd"), "Siri listening for \"Hey Siri\" isn't a call")
+    check(!Microphone.meansCall("corespeechd_system"), "nor is the system-wide part of it")
+    check(Microphone.meansCall("zoom.us"), "Zoom is a call")
+    check(Microphone.meansCall("FaceTime"), "FaceTime is a call")
+    check(Microphone.meansCall("Google Chrome Helper"), "a browser recording (Google Meet) is a call")
+    check(Microphone.meansCall(""), "a program that can't be told still counts, to be safe")
+    check(Microphone.programName(1) == "launchd",
+          "a program run by macOS itself can be named: \(Microphone.programName(1))")
+    check(Microphone.programName(getpid()) == "schedule-tests",
+          "this program can be named: \(Microphone.programName(getpid()))")
 }
 
 print("\(checks - failures) of \(checks) checks passed")
