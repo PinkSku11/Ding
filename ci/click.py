@@ -3,7 +3,8 @@
     python3 click.py click X Y     click at a screen point (top-left origin)
     python3 click.py type TEXT     type text into whatever has keyboard focus
     python3 click.py tripleclick X Y   triple-click, which selects all the text in a field
-    python3 click.py key return    press Return
+    python3 click.py key return    press Return (also: down, up, escape)
+    python3 click.py drag X1 Y1 X2 Y2   press at one point, drag to the other, let go
 """
 import ctypes
 import sys
@@ -50,8 +51,24 @@ elif sys.argv[1] == "tripleclick":
             cg.CGEventPost(0, event)
         time.sleep(0.05)
     print("triple-clicked at", point.x, point.y)
-elif sys.argv[1] == "key" and sys.argv[2] == "return":
+elif sys.argv[1] == "key":
+    code = {"return": 36, "down": 125, "up": 126, "escape": 53}[sys.argv[2]]
     for down in (True, False):
-        cg.CGEventPost(0, cg.CGEventCreateKeyboardEvent(None, 36, down))
+        cg.CGEventPost(0, cg.CGEventCreateKeyboardEvent(None, code, down))
         time.sleep(0.04)
-    print("pressed Return")
+    print("pressed", sys.argv[2])
+elif sys.argv[1] == "drag":
+    x1, y1, x2, y2 = (float(v) for v in sys.argv[2:6])
+    start, end = CGPoint(x1, y1), CGPoint(x2, y2)
+    cg.CGEventPost(0, cg.CGEventCreateMouseEvent(None, 5, start, 0))   # move there
+    time.sleep(0.1)
+    cg.CGEventPost(0, cg.CGEventCreateMouseEvent(None, 1, start, 0))   # press
+    time.sleep(0.1)
+    steps = 12
+    for i in range(1, steps + 1):
+        point = CGPoint(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps)
+        cg.CGEventPost(0, cg.CGEventCreateMouseEvent(None, 6, point, 0))   # drag
+        time.sleep(0.03)
+    time.sleep(0.1)
+    cg.CGEventPost(0, cg.CGEventCreateMouseEvent(None, 2, end, 0))     # let go
+    print("dragged from", x1, y1, "to", x2, y2)

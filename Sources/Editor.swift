@@ -10,6 +10,8 @@ final class EditorModel: ObservableObject {
     @Published var confirmingDelete = false
     @Published var isNew: Bool               // a new alarm, or a copy that isn't saved yet
     @Published var focusName = 0             // bumped to put the cursor in the name box
+    @Published var note: String?             // why the sound you're trying is silent, shown for a few seconds
+    private var noteTimer: DispatchWorkItem?
     var choosingFile = false                 // the file chooser is open; don't close on outside clicks
 
     init(alarm: Alarm, isNew: Bool) {
@@ -25,6 +27,15 @@ final class EditorModel: ObservableObject {
         case .some(.repeating): return alarm.every > 0
         case .some(.once): return true
         }
+    }
+
+    func showNote(_ text: String?) {
+        noteTimer?.cancel()
+        note = text
+        guard text != nil else { return }
+        let timer = DispatchWorkItem { [weak self] in self?.note = nil }
+        noteTimer = timer
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: timer)
     }
 
     /// "Duplicate": the window becomes a new alarm with the same settings, named "… copy", ready to rename.
@@ -137,6 +148,7 @@ struct EditorView: View {
                                 .foregroundStyle(.secondary)
                                 .accessibilityHidden(true)
                             Slider(value: $model.alarm.volume, in: 0...1, onEditingChanged: { editing in
+                                RingLog.write("slider \(editing ? "pressed" : "let go") at \(String(format: "%.2f", model.alarm.volume))")
                                 if !editing { playAtNewVolume() }   // let go: hear how loud it is
                             })
                             .frame(width: 210)
@@ -174,7 +186,16 @@ struct EditorView: View {
                         Text("Delete").foregroundStyle(.red)
                     }
                 } else {
-                    Spacer()
+                    if let note = model.note {
+                        Text(verbatim: note)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .padding(.leading, 10)
+                            .transition(.opacity)
+                    }
+                    Spacer(minLength: 8)
                     if !model.isNew {
                         Button("Duplicate") { model.duplicate() }
                             .keyboardShortcut("d", modifiers: .command)
@@ -193,6 +214,7 @@ struct EditorView: View {
             .padding(.horizontal, 20)
             .padding(.top, 0)
             .padding(.bottom, 18)
+            .animation(.easeInOut(duration: 0.2), value: model.note)
         }
         .frame(width: 520)
     }
@@ -220,6 +242,7 @@ struct EditorView: View {
                 return SoundLibrary.fallbackID(in: systemSounds)   // its file is gone: show what plays instead
             },
             set: { newValue in
+                RingLog.write("picked \(newValue) (was \(model.alarm.sound))")
                 guard newValue == SoundLibrary.addFileTag else {
                     model.alarm.sound = newValue
                     playSample()
@@ -246,7 +269,8 @@ struct EditorView: View {
     /// While Play sound or Volume is still 0 (a new alarm), it plays once, at half volume, so you can hear it.
     private func playSample() {
         guard !model.alarm.sound.isEmpty else {
-            Ringer.shared.stopPreview()
+            Ringer.shared.stopPreview(because: "None was picked")
+            model.showNote(nil)
             return
         }
         var sample = model.alarm
@@ -255,19 +279,20 @@ struct EditorView: View {
             sample.playUnit = .times
         }
         if sample.volume <= 0 { sample.volume = 0.5 }
-        Ringer.shared.preview(sample) {}
+        model.showNote(Ringer.shared.preview(sample))
     }
 
     /// After you let go of the volume slider: the sound once, at the new volume (nothing at 0).
     private func playAtNewVolume() {
         guard !model.alarm.sound.isEmpty, model.alarm.volume > 0 else {
-            Ringer.shared.stopPreview()
+            Ringer.shared.stopPreview(because: "the volume went to 0")
+            model.showNote(nil)
             return
         }
         var sample = model.alarm
         sample.plays = 1
         sample.playUnit = .times
-        Ringer.shared.preview(sample) {}
+        model.showNote(Ringer.shared.preview(sample))
     }
 }
 

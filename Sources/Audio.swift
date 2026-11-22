@@ -72,22 +72,31 @@ enum SystemAudio {
         _ = AudioObjectSetPropertyData(device, &addr, 0, nil, UInt32(MemoryLayout<UInt32>.size), &value)
     }
 
-    /// True while another app is recording from a microphone, which usually means a call.
-    static func isMicrophoneInUse() -> Bool {
+    /// What's recording from a microphone right now (usually a call), or nil if nothing is.
+    /// The app's name, a background program's name, or "" when it can't be told.
+    static func microphoneUser() -> String? {
         if #available(macOS 14.2, *), let processes = audioProcesses() {
             // Asks each app that uses sound whether it's recording, so playing music doesn't count.
-            let me = UInt32(bitPattern: ProcessInfo.processInfo.processIdentifier)
-            return processes.contains { process in
-                readUInt32(process, kAudioProcessPropertyIsRunningInput, kAudioObjectPropertyScopeGlobal) == 1
-                    && readUInt32(process, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal) != me
+            let me = ProcessInfo.processInfo.processIdentifier
+            for process in processes
+            where readUInt32(process, kAudioProcessPropertyIsRunningInput, kAudioObjectPropertyScopeGlobal) == 1 {
+                let pid = readUInt32(process, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal)
+                    .map { pid_t(bitPattern: $0) }
+                if pid == me { continue }
+                guard let pid else { return "" }
+                if let name = NSRunningApplication(processIdentifier: pid)?.localizedName { return name }
+                var buffer = [CChar](repeating: 0, count: 256)
+                return proc_name(pid, &buffer, UInt32(buffer.count)) > 0 ? String(cString: buffer) : ""
             }
+            return nil
         }
         // Older systems: is the microphone running? Not when it's the same device as the output
         // (AirPods, USB headsets), because playing music runs that too.
         guard let input = inputDevice, input != outputDevice,
-              let running = readUInt32(input, kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioObjectPropertyScopeGlobal)
-        else { return false }
-        return running != 0
+              let running = readUInt32(input, kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioObjectPropertyScopeGlobal),
+              running != 0
+        else { return nil }
+        return ""
     }
 
     /// Every app connected to the Mac's sound system.
@@ -158,6 +167,36 @@ enum SystemAudio {
 
 // MARK: - Playing alarms
 
+/// What happened when Ding tried to play an alarm's sound.
+enum SoundResult: Equatable {
+    case played
+    case nothingToPlay           // Sound is None, or Play sound or Volume is 0
+    case muted                   // the Mac is muted, and this alarm doesn't ring when muted
+    case microphone(String)      // something is recording, usually a call: its name, or "" if unknown
+    case failed                  // macOS couldn't play the file
+
+    /// Why you can't hear the sound you're trying in the editor. Nil when it played or there's nothing to play.
+    var note: String? {
+        switch self {
+        case .played, .nothingToPlay: return nil
+        case .muted: return "No sound: the Mac is muted"
+        case .microphone(let name): return name.isEmpty ? "No sound: the mic is in use" : "No sound: \(name) is using the mic"
+        case .failed: return "No sound: couldn't play it"
+        }
+    }
+
+    /// One word for the build machine's log.
+    var logWord: String {
+        switch self {
+        case .played: return "played"
+        case .nothingToPlay: return "silent-nothing-to-play"
+        case .muted: return "silent-muted"
+        case .microphone(let name): return "silent-mic:" + name.replacingOccurrences(of: " ", with: "_")
+        case .failed: return "silent-failed"
+        }
+    }
+}
+
 /// Plays rings one after another, each at its own volume, then puts the Mac's volume back.
 final class Ringer: NSObject, AVAudioPlayerDelegate {
     static let shared = Ringer()
@@ -175,7 +214,8 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
     private var pending: DispatchWorkItem?
     private var saved: [AudioObjectID: (volume: Float?, muted: Bool)] = [:]   // each device as it was before ringing
-    private var previewDone: (() -> Void)?
+    private var previewing = false
+    private var playerStarted = Date()
     private static let testSnooze = UserDefaults.standard.string(forKey: "DingTestSnooze").flatMap(UUID.init(uuidString:))
     private var testSnoozed = false
 
@@ -184,7 +224,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     }
 
     func enqueue(_ rings: [Ring]) {
-        if previewDone != nil { stopPreview() }
+        if previewing { stopPreview(because: "an alarm rang") }
         for ring in rings {
             // Still ringing from last time (a sound longer than the gap between rings): let that one finish,
             // rather than piling up rings that would play on and on.
@@ -206,7 +246,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     /// Stops the sound right away and clears the notification (a click on the notification or on the blue bell,
     /// or quitting Ding), and puts the volume back.
     func stopAll() {
-        if previewDone != nil { stopPreview() }
+        if previewing { stopPreview(because: "stopped") }
         queue.removeAll()
         cancelPending()
         player?.stop()
@@ -241,8 +281,9 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         let posted = Notifier.shared.post(ring)
         notificationID = posted
         postedWhileRinging.insert(posted)
-        let played = startSound(for: ring.alarm)
-        RingLog.write("ring \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970) sound \(played ? "played" : "silent")")
+        let result = startSound(for: ring.alarm)
+        let played = result == .played
+        RingLog.write("ring \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970) sound \(played ? "played" : "silent") \(result.logWord)")
         if let test = Ringer.testSnooze, test == ring.alarm.id, !testSnoozed {
             // The build machine's live test: press "Snooze 5 min" on this alarm's first ring, as a click would.
             testSnoozed = true
@@ -275,15 +316,15 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    /// Starts an alarm's sound following its settings. Returns false when it should stay silent.
-    private func startSound(for alarm: Alarm) -> Bool {
-        if alarm.sound.isEmpty || alarm.plays <= 0 || alarm.volume <= 0 { return false }
-        if SystemAudio.isMicrophoneInUse() { return false }
+    /// Starts an alarm's sound following its settings, or says why it stays silent.
+    private func startSound(for alarm: Alarm) -> SoundResult {
+        if alarm.sound.isEmpty || alarm.plays <= 0 || alarm.volume <= 0 { return .nothingToPlay }
+        if let user = SystemAudio.microphoneUser() { return .microphone(user) }
         let device = SystemAudio.outputDevice
         let muted = device.map(SystemAudio.isMuted) ?? false
-        if muted && !alarm.ringWhenMuted { return false }
+        if muted && !alarm.ringWhenMuted { return .muted }
         guard let url = SoundLibrary.url(for: alarm.sound),
-              let newPlayer = try? AVAudioPlayer(contentsOf: url) else { return false }
+              let newPlayer = try? AVAudioPlayer(contentsOf: url) else { return .failed }
 
         var level = Float(alarm.volume)
         let worn = SystemAudio.isHeadphones()
@@ -315,22 +356,31 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
             length = TimeInterval(alarm.plays)
         }
         newPlayer.prepareToPlay()
-        guard newPlayer.play() else { return false }
+        guard newPlayer.play() else { return .failed }
         player = newPlayer
+        playerStarted = Date()
         schedule(after: length) { [weak self] in self?.soundEnded() }
-        return true
+        return .played
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         DispatchQueue.main.async { [weak self] in
-            guard let self, player === self.player else { return }
+            guard let self else { return }
+            let current = player === self.player
+            RingLog.write("player finished \(flag ? "ok" : "with-error") after \(self.elapsed) \(current ? "" : "(an earlier one)")")
+            guard current else { return }
             self.soundEnded()
         }
     }
 
+    /// Seconds since the current sound started, for the build machine's log.
+    private var elapsed: String {
+        String(format: "%.2fs", Date().timeIntervalSince(playerStarted))
+    }
+
     private func soundEnded() {
-        if previewDone != nil {
-            stopPreview()
+        if previewing {
+            stopPreview(because: "it ended")
         } else {
             ringFinished()
         }
@@ -366,26 +416,28 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
 
     // MARK: Preview in the editor
 
-    /// Plays an alarm exactly as it will ring. `done` runs when it stops.
-    func preview(_ alarm: Alarm, done: @escaping () -> Void) {
-        guard current == nil else {   // a real alarm is ringing
-            done()
-            return
+    /// Plays an alarm's sound in the editor, as it will ring. Returns why you can't hear it, if you can't.
+    @discardableResult
+    func preview(_ alarm: Alarm) -> String? {
+        guard current == nil else {
+            RingLog.write("preview silent-alarm-ringing sound \(alarm.sound)")
+            return "No sound: an alarm is ringing"
         }
-        stopPreview()
-        previewDone = done
-        if !startSound(for: alarm) {
-            stopPreview()
-        }
+        stopPreview(because: "a new one started")
+        previewing = true
+        let result = startSound(for: alarm)
+        RingLog.write("preview \(result.logWord) sound \(alarm.sound) volume \(String(format: "%.2f", alarm.volume)) plays \(alarm.plays) \(alarm.playUnit.rawValue)")
+        if result != .played { stopPreview(because: "silent") }
+        return result.note
     }
 
-    func stopPreview() {
-        guard let done = previewDone else { return }
-        previewDone = nil
+    func stopPreview(because reason: String = "the editor closed") {
+        guard previewing else { return }
+        previewing = false
         cancelPending()
+        if player != nil { RingLog.write("preview stopped (\(reason)) after \(elapsed)") }
         player?.stop()
         player = nil
         restoreVolume()
-        done()
     }
 }

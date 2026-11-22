@@ -301,6 +301,36 @@ PY
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 
 echo
+echo "== Preview experiment: pick sounds and move the volume like a person would, and log every step"
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+rm -f /tmp/ding-preview.log
+pkill -x Ding 2>/dev/null; sleep 1
+open -n "$APP" --args -DingShow editor -DingDark YES -DingRingLog /tmp/ding-preview.log
+sleep 4
+POPUP_X=973; POPUP_Y=358            # the Sound box in the editor for the first sample alarm
+echo "-- the same sound again (Glass, already picked)"
+python3 ci/click.py click $POPUP_X $POPUP_Y; sleep 0.8
+screencapture -x "$OUT/preview-popup-open.png"
+python3 ci/click.py click $POPUP_X $POPUP_Y; sleep 2
+echo "-- the next sound, then quickly the ones after it"
+for GAP in 2.5 0.4 1.2 0.6 0.3 2.0; do
+    python3 ci/click.py click $POPUP_X $POPUP_Y; sleep 0.6
+    python3 ci/click.py key down; sleep 0.15
+    python3 ci/click.py key return; sleep $GAP
+done
+echo "-- the volume slider: drags, and a click on the bar"
+python3 ci/click.py drag 910 441 800 441; sleep 2
+python3 ci/click.py drag 800 441 880 441; sleep 2
+python3 ci/click.py click 850 441; sleep 2
+python3 ci/click.py drag 850 441 760 441; sleep 2
+screencapture -x "$OUT/preview-after.png"
+pkill -x Ding; sleep 1
+echo "-- what Ding did:"
+awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-preview.log 2>/dev/null || echo "(no log)"
+cp /tmp/ding-preview.log "$OUT/preview-log.txt" 2>/dev/null
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+
+echo
 echo "== A Mac set to 24-hour time: Ding follows it, and AM/PM can still be picked"
 defaults write -g AppleICUForce24HourTime -bool true
 shoot options blue-options-mac24 dark || TEST_OK=0
