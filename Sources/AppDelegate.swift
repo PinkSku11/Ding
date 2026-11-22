@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         Notifier.shared.setUp()
         Notifier.shared.onClick = { Ringer.shared.stopAll() }
+        Notifier.shared.onSnooze = { id in Engine.shared.snoozeNow(id) }
         Ringer.shared.onChange = { [weak self] in self?.refreshIcon() }
         AlarmStore.shared.onChange = { Engine.shared.recompute() }
         Engine.shared.onStateChange = { [weak self] in self?.refreshIcon() }
@@ -103,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alarms = AlarmStore.shared.alarms
         if Ringer.shared.isRinging {
             button.image = StatusIcon.ringing
-        } else if !alarms.isEmpty && !alarms.contains(where: { $0.isOn }) {
+        } else if !alarms.isEmpty && !alarms.contains(where: { $0.isOn }) && !Engine.shared.hasSnoozes {
             button.image = StatusIcon.bellOff
         } else {
             button.image = StatusIcon.bell
@@ -201,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     detail: Format.subtitle(alarm),
                     onToggle: { [weak self, weak headerView] on in
                         AlarmStore.shared.setOn(id, on)
+                        if !on { Engine.shared.cancelSnooze(id) }   // switched off: no snoozed ring either
                         if let self { headerView?.setText(self.nextText()) }
                         return AlarmStore.shared.alarm(id).map(Format.subtitle)
                     },
@@ -259,7 +261,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func nextText() -> String {
         guard let soonest = Engine.shared.soonest() else { return "All alarms are off" }
-        return "Next: \(soonest.alarm.displayName) \(Format.when(soonest.time))"
+        let snoozed = soonest.snoozed ? " (snoozed)" : ""
+        return "Next: \(soonest.alarm.displayName) \(Format.when(soonest.time))\(snoozed)"
     }
 
 

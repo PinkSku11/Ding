@@ -216,7 +216,8 @@ sleep 1
 FIRST=$(python3 ci/live-alarms.py "$SUPPORT/alarms.json")
 if [ -n "$FIRST" ]; then
     rm -f /tmp/ding-rings.log
-    open -n "$APP" --args -DingRingLog /tmp/ding-rings.log
+    open -n "$APP" --args -DingRingLog /tmp/ding-rings.log \
+        -DingTestSnooze 00000000-0000-4000-8000-0000000000B2 -DingSnoozeSeconds 60
     WAIT=$(python3 -c "import time; print(max(0, int($FIRST + 5 * 60 + 20 - time.time())))")
     echo "First ring at $FIRST, waiting $WAIT s"
     sleep "$WAIT"
@@ -245,6 +246,23 @@ shoot editor blue-editor-24h dark || TEST_OK=0
 shoot menu blue-menu-24h dark || TEST_OK=0
 shoot options blue-options-24h dark || TEST_OK=0
 defaults delete com.shriya.Ding timeFormat
+
+echo
+echo "== One of your sounds deleted: the editor shows Glass, which plays instead"
+python3 - "$SUPPORT/alarms.json" <<'PY'
+import json, sys
+alarms = json.load(open(sys.argv[1]))
+alarms[0]["sound"] = "custom:A sound that was deleted.m4a"
+json.dump(alarms, open(sys.argv[1], "w"))
+PY
+shoot editor blue-editor-missing-sound dark || TEST_OK=0
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+
+echo
+echo "== A snoozed alarm that's off (a one-time alarm switches itself off): the Next line shows it"
+defaults write com.shriya.Ding snoozes -dict 6F1C1D2E-0000-4000-8000-000000000004 -float "$(( $(date +%s) + 30 ))"
+shoot menu blue-menu-snoozed dark || TEST_OK=0
+defaults delete com.shriya.Ding snoozes 2>/dev/null
 
 echo
 echo "== A Mac set to 24-hour time: Ding follows it, and AM/PM can still be picked"

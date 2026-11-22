@@ -46,7 +46,13 @@ enum SoundLibrary {
             return match.url
         }
         let builtIn = system()
-        return builtIn.first(where: { $0.id == "Glass" })?.url ?? builtIn.first?.url
+        let fallback = fallbackID(in: builtIn)
+        return builtIn.first(where: { $0.id == fallback })?.url
+    }
+
+    /// What plays when an alarm's sound file is gone (one of your sounds that you've since deleted): Glass.
+    static func fallbackID(in system: [SoundOption]) -> String {
+        system.first(where: { $0.id == "Glass" })?.id ?? system.first?.id ?? ""
     }
 
     /// Asks for an audio file, copies it into Ding's sounds folder and returns its sound id.

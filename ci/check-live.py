@@ -6,7 +6,7 @@ log_path, alarms_path, first = sys.argv[1], sys.argv[2], float(sys.argv[3])
 A, B, C, D, E, F = ("00000000-0000-4000-8000-0000000000" + s for s in ("A1", "B2", "C3", "D4", "E5", "F6"))
 names = {A: "Every minute", B: "One-off", C: "Same minute", D: "Switched off", E: "Silent", F: "Long sound"}
 
-rings, offs, skipped, busy = {}, set(), [], {}
+rings, offs, skipped, busy, snoozes = {}, set(), [], {}, set()
 for line in open(log_path):
     parts = line.split()
     if len(parts) < 3:
@@ -20,6 +20,8 @@ for line in open(log_path):
         skipped.append(names.get(alarm, alarm))
     elif kind == "busy":
         busy.setdefault(alarm, []).append(round((float(parts[4]) - first) / 60))
+    elif kind == "snooze":
+        snoozes.add(alarm)
 
 problems = []
 
@@ -40,7 +42,25 @@ def expect(alarm, minutes, sounds=("played", "silent")):
 
 
 expect(A, [0, 1, 2, 3, 4], sounds=("played",))
+# The one-off's first ring is snoozed (as a click on "Snooze 5 min" would; 60 seconds in this test).
+# It rings once more about a minute later, even though a one-time alarm switches itself off after it rings.
+b_rings = rings.get(B, [])
+rings[B] = b_rings[:1]
 expect(B, [1], sounds=("played",))
+if B not in snoozes:
+    problems.append("the one-off alarm wasn't snoozed")
+if len(b_rings) != 2:
+    problems.append(f"the snoozed alarm rang {len(b_rings)} times, expected 2")
+else:
+    actual, due, sound = b_rings[1]
+    gap = due - b_rings[0][1]
+    print(f"  {'Snoozed':<13} due {gap:.0f} s after its first ring, started {actual - due:4.1f} s after, sound {sound}")
+    if not 61 <= gap <= 75:
+        problems.append(f"the snoozed ring was due {gap:.0f} s after the first, expected a minute and a few seconds")
+    if not 0 <= actual - due <= 8:
+        problems.append(f"the snoozed ring started {actual - due:.1f} s after it was due")
+    if sound != "played":
+        problems.append(f"the snoozed ring's sound was {sound}")
 expect(C, [2], sounds=("played",))
 expect(D, [])
 expect(E, [3], sounds=("silent",))
@@ -66,4 +86,4 @@ if problems:
         print("  -", problem)
     sys.exit(1)
 print("Live test: every ring came on time, the one-off switched itself off, the switched-off alarm stayed quiet,")
-print("and a sound longer than its gap finished without piling up rings.")
+print("a sound longer than its gap finished without piling up rings, and a snoozed alarm rang again on time.")

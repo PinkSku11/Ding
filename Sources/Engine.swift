@@ -22,6 +22,7 @@ struct Ring {
     let alarm: Alarm
     let time: Date
     let next: Date?
+    var snoozed = false
 }
 
 /// Keeps time: works out when each alarm rings next and fires it.
@@ -32,6 +33,7 @@ final class Engine: NSObject {
 
     private var timer: Timer?
     private var due: [UUID: Date] = [:]
+    private var snoozes: [UUID: Date] = [:]   // snoozed alarms and when each rings again
     private var napBlocker: NSObjectProtocol?
     private var sleepBlocker: NSObjectProtocol?
     private var ticks = 0
@@ -46,6 +48,7 @@ final class Engine: NSObject {
             options: .userInitiatedAllowingIdleSystemSleep,
             reason: "Ding keeps time for your alarms")
 
+        loadSnoozes()
         recompute()
 
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
@@ -88,6 +91,11 @@ final class Engine: NSObject {
             }
         }
         if !finished.isEmpty { AlarmStore.shared.switchOff(finished) }
+        let ids = Set(AlarmStore.shared.alarms.map(\.id))
+        if snoozes.keys.contains(where: { !ids.contains($0) }) {   // a snoozed alarm was deleted
+            snoozes = snoozes.filter { ids.contains($0.key) }
+            saveSnoozes()
+        }
         updateKeepAwake(now)
         onStateChange?()
     }
@@ -96,16 +104,64 @@ final class Engine: NSObject {
         due[id]
     }
 
-    /// The alarm that rings next, and when.
+    var hasSnoozes: Bool { !snoozes.isEmpty }
+
+    /// The alarm that rings next, and when (a snoozed one included).
     func soonest() -> Ring? {
         var best: Ring?
-        for alarm in AlarmStore.shared.alarms where alarm.isOn {
-            guard let time = due[alarm.id] else { continue }
-            if best == nil || time < best!.time {
+        for alarm in AlarmStore.shared.alarms {
+            if alarm.isOn, let time = due[alarm.id], best == nil || time < best!.time {
                 best = Ring(alarm: alarm, time: time, next: nil)
+            }
+            if let time = snoozes[alarm.id], best == nil || time < best!.time {
+                best = Ring(alarm: alarm, time: time, next: nil, snoozed: true)
             }
         }
         return best
+    }
+
+    // MARK: Snooze
+
+    /// How long "Snooze 5 min" waits. The build machine's live test makes it shorter.
+    private var snoozeLength: TimeInterval {
+        let test = UserDefaults.standard.double(forKey: "DingSnoozeSeconds")
+        return test > 0 ? test : 5 * 60
+    }
+
+    /// "Snooze 5 min" on the notification: stop the ring, and ring this alarm again five minutes from now.
+    /// It rings even if the alarm has switched itself off since (a one-time alarm).
+    func snoozeNow(_ id: UUID) {
+        Ringer.shared.stopAll()
+        guard AlarmStore.shared.alarm(id) != nil else { return }
+        let time = Date().addingTimeInterval(snoozeLength)
+        snoozes[id] = time
+        saveSnoozes()
+        RingLog.write("snooze \(id.uuidString) until \(time.timeIntervalSince1970)")
+        updateKeepAwake(Date())
+        onStateChange?()
+    }
+
+    /// Switching an alarm off in the menu also cancels its snooze.
+    func cancelSnooze(_ id: UUID) {
+        guard snoozes.removeValue(forKey: id) != nil else { return }
+        saveSnoozes()
+        updateKeepAwake(Date())
+        onStateChange?()
+    }
+
+    /// Snoozes are kept in Ding's settings, so quitting or restarting Ding doesn't lose them.
+    private func loadSnoozes() {
+        let saved = UserDefaults.standard.dictionary(forKey: "snoozes") as? [String: Double] ?? [:]
+        snoozes = [:]
+        for (key, time) in saved {
+            if let id = UUID(uuidString: key) { snoozes[id] = Date(timeIntervalSince1970: time) }
+        }
+    }
+
+    private func saveSnoozes() {
+        var saved: [String: Double] = [:]
+        for (id, time) in snoozes { saved[id.uuidString] = time.timeIntervalSince1970 }
+        UserDefaults.standard.set(saved, forKey: "snoozes")
     }
 
     private func tick() {
@@ -131,6 +187,18 @@ final class Engine: NSObject {
             }
         }
 
+        for (id, time) in snoozes where now >= time {
+            snoozes[id] = nil
+            changed = true
+            guard let alarm = AlarmStore.shared.alarm(id) else { continue }
+            if now.timeIntervalSince(time) <= 60 {
+                rings.append(Ring(alarm: alarm, time: time, next: due[id], snoozed: true))
+            } else {
+                RingLog.write("skipped \(id.uuidString) due \(time.timeIntervalSince1970)")
+            }
+            saveSnoozes()
+        }
+
         if !finished.isEmpty { AlarmStore.shared.switchOff(finished) }
         if !rings.isEmpty { Ringer.shared.enqueue(rings) }
 
@@ -146,7 +214,9 @@ final class Engine: NSObject {
     /// "Keep Mac awake for this alarm": no idle sleep while that alarm's time range is running,
     /// or in the few minutes before it rings once.
     private func updateKeepAwake(_ now: Date) {
-        let wanted = AlarmStore.shared.alarms.contains { $0.keepAwake && Schedule.wantsMacAwake($0, at: now) }
+        let snoozedAwake = snoozes.keys.contains { AlarmStore.shared.alarm($0)?.keepAwake == true }
+        let wanted = snoozedAwake
+            || AlarmStore.shared.alarms.contains { $0.keepAwake && Schedule.wantsMacAwake($0, at: now) }
         if wanted, sleepBlocker == nil {
             sleepBlocker = ProcessInfo.processInfo.beginActivity(
                 options: .idleSystemSleepDisabled,

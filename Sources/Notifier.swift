@@ -8,9 +8,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// Runs when the notification is clicked or closed.
     var onClick: (() -> Void)?
+    /// Runs when "Snooze 5 min" is clicked, with the alarm to snooze.
+    var onSnooze: ((UUID) -> Void)?
 
     private let center = UNUserNotificationCenter.current()
     private let categoryID = "ding.ring"
+    private let snoozeID = "ding.snooze"
 
     private override init() {
         super.init()
@@ -18,8 +21,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     func setUp() {
         center.delegate = self
+        let snooze = UNNotificationAction(identifier: snoozeID, title: "Snooze 5 min", options: [])
         let category = UNNotificationCategory(identifier: categoryID,
-                                              actions: [],
+                                              actions: [snooze],
                                               intentIdentifiers: [],
                                               options: [.customDismissAction])
         center.setNotificationCategories([category])
@@ -32,12 +36,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let id = "ding." + UUID().uuidString
         let content = UNMutableNotificationContent()
         content.title = ring.alarm.displayName
-        var lines = [Format.time(ring.time)]
+        var lines = [ring.snoozed ? "\(Format.time(ring.time)) (snoozed)" : Format.time(ring.time)]
         if let next = ring.next {
             lines.append(Format.nextLine(next, from: ring.time))
         }
         content.body = lines.joined(separator: "\n")
         content.categoryIdentifier = categoryID
+        content.userInfo = ["alarm": ring.alarm.id.uuidString]
         center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
         return id
     }
@@ -55,12 +60,18 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         [.banner]
     }
 
-    // A click anywhere on the notification (or closing it) stops the sound.
+    // A click anywhere on the notification (or closing it) stops the sound; "Snooze 5 min" also rings it again later.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse) async {
         center.removeDeliveredNotifications(withIdentifiers: [response.notification.request.identifier])
+        let alarm = (response.notification.request.content.userInfo["alarm"] as? String).flatMap(UUID.init(uuidString:))
+        let snooze = response.actionIdentifier == snoozeID
         await MainActor.run {
-            Notifier.shared.onClick?()
+            if snooze, let alarm {
+                Notifier.shared.onSnooze?(alarm)
+            } else {
+                Notifier.shared.onClick?()
+            }
         }
     }
 }

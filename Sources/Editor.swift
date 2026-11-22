@@ -194,7 +194,11 @@ struct EditorView: View {
 
     private var soundBinding: Binding<String> {
         Binding(
-            get: { model.alarm.sound },
+            get: {
+                let id = model.alarm.sound
+                if id.isEmpty || (customSounds + systemSounds).contains(where: { $0.id == id }) { return id }
+                return SoundLibrary.fallbackID(in: systemSounds)   // its file is gone: show what plays instead
+            },
             set: { newValue in
                 guard newValue == SoundLibrary.addFileTag else {
                     model.alarm.sound = newValue

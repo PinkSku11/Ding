@@ -10,6 +10,8 @@ A small alarm for the Mac menu bar. Each alarm rings either repeatedly (every fe
 
 Ding is the bell in the menu bar. Click it for your alarms. Right-click it to choose 24-hour or AM/PM times, to have Ding open at login, or to quit.
 
+When an alarm rings, click its notification or the bell to stop it, or click Snooze 5 min on the notification to hear it again five minutes later.
+
 ## Good to know
 
 - Ding rings only while it's open, so turn on Open at login if you want it there after a restart.
