@@ -6,8 +6,8 @@ import UserNotifications
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = Notifier()
 
-    /// Runs when the notification is clicked or closed.
-    var onClick: (() -> Void)?
+    /// Runs when a notification is clicked or closed, with its id.
+    var onClick: ((String) -> Void)?
     /// Runs when "Snooze 5 min" is clicked, with the alarm to snooze.
     var onSnooze: ((UUID) -> Void)?
 
@@ -72,7 +72,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             if snooze, let alarm {
                 Notifier.shared.onSnooze?(alarm)
             } else {
-                Notifier.shared.onClick?()
+                Notifier.shared.onClick?(response.notification.request.identifier)
             }
         }
     }

@@ -3,8 +3,9 @@ import json
 import sys
 
 log_path, alarms_path, first = sys.argv[1], sys.argv[2], float(sys.argv[3])
-A, B, C, D, E, F = ("00000000-0000-4000-8000-0000000000" + s for s in ("A1", "B2", "C3", "D4", "E5", "F6"))
-names = {A: "Every minute", B: "One-off", C: "Same minute", D: "Switched off", E: "Silent", F: "Long sound"}
+A, B, C, D, E, F, G = ("00000000-0000-4000-8000-0000000000" + s for s in ("A1", "B2", "C3", "D4", "E5", "F6", "A7"))
+names = {A: "Every minute", B: "One-off", C: "Same minute", D: "Switched off", E: "Silent", F: "Long sound",
+         G: "After a snooze"}
 
 rings, offs, skipped, busy, snoozes, kept, cleared = {}, set(), [], {}, set(), set(), set()
 for line in open(log_path):
@@ -66,6 +67,7 @@ else:
     if sound != "played":
         problems.append(f"the snoozed ring's sound was {sound}")
 expect(C, [2], sounds=("played",))
+expect(G, [1], sounds=("played",))   # was waiting behind the one-off when it was snoozed
 expect(D, [])
 expect(E, [3], sounds=("silent",))
 expect(F, [4], sounds=("played",))

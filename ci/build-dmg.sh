@@ -265,6 +265,42 @@ shoot menu blue-menu-snoozed dark || TEST_OK=0
 defaults delete com.shriya.Ding snoozes 2>/dev/null
 
 echo
+echo "== Duplicate: the editor becomes an unsaved copy named \"Water break copy\"; Return saves it"
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+pkill -x Ding 2>/dev/null; sleep 1
+open -n "$APP" --args -DingShow editor-duplicate -DingDark YES
+sleep 6
+screencapture -x "$OUT/blue-editor-duplicate.png"
+python3 ci/click.py click 560 55        # the window's title, to be sure it has the keyboard
+python3 ci/click.py key return
+sleep 1.5
+pgrep -x Ding >/dev/null || echo "Ding stopped running in the duplicate test"
+pkill -x Ding; sleep 1
+python3 - "$SUPPORT/alarms.json" ci/sample-alarms.json <<'PY' || TEST_OK=0
+import json, sys
+saved, sample = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+fields = ["kind", "fromMinute", "untilMinute", "every", "everyUnit", "timeMinute", "sound", "plays", "playUnit",
+          "volume", "ringWhenMuted", "keepAwake"]
+def same(a, b):
+    return all(a.get(f) == b.get(f) for f in fields) and set(a.get("days", [])) == set(b.get("days", []))
+original = next(a for a in sample if a["name"] == "Water break")
+kept = next((a for a in saved if a["id"] == original["id"]), None)
+copies = [a for a in saved if a["name"] == "Water break copy"]
+print(f"After Duplicate and Return: {len(saved)} alarms (was {len(sample)}), copies named 'Water break copy': {len(copies)}")
+problems = []
+if len(saved) != len(sample) + 1 or len(copies) != 1:
+    problems.append("expected exactly one new alarm, the copy")
+elif copies[0]["id"] == original["id"] or not same(copies[0], original) or not copies[0]["isOn"]:
+    problems.append("the copy doesn't have its own id and the same settings, switched on")
+if kept is None or kept["name"] != "Water break" or not same(kept, original):
+    problems.append("the original changed")
+for problem in problems:
+    print("DUPLICATE TEST PROBLEM:", problem)
+sys.exit(1 if problems else 0)
+PY
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+
+echo
 echo "== A Mac set to 24-hour time: Ding follows it, and AM/PM can still be picked"
 defaults write -g AppleICUForce24HourTime -bool true
 shoot options blue-options-mac24 dark || TEST_OK=0

@@ -307,5 +307,19 @@ do {
     check(again?.first?.keepNotification == true, "Keep in Notification Center is saved")
 }
 
+// MARK: Duplicate names
+
+do {
+    check(Alarm.copyName(of: "Water break", taken: ["Water break"]) == "Water break copy", "first copy")
+    check(Alarm.copyName(of: "Water break", taken: ["Water break", "Water break copy"]) == "Water break copy 2",
+          "second copy")
+    check(Alarm.copyName(of: "Water break copy", taken: ["Water break", "Water break copy"]) == "Water break copy 2",
+          "a copy of a copy: \(Alarm.copyName(of: "Water break copy", taken: ["Water break", "Water break copy"]))")
+    check(Alarm.copyName(of: "Water break copy 2", taken: ["Water break copy", "Water break copy 2"]) == "Water break copy 3",
+          "a copy of copy 2")
+    check(Alarm.copyName(of: "Alarm", taken: []) == "Alarm copy", "an unnamed alarm")
+    check(Alarm.copyName(of: "Photocopy", taken: []) == "Photocopy copy", "a name that only ends in \"copy\"")
+}
+
 print("\(checks - failures) of \(checks) checks passed")
 exit(failures == 0 ? 0 : 1)

@@ -34,6 +34,9 @@ alarms = [
     # Plays for 70 seconds but is due every minute: the second ring comes while the first is still playing.
     dict(base, id="00000000-0000-4000-8000-0000000000F6", name="Long sound", kind="repeating",
          fromMinute=first_minute + 4, untilMinute=first_minute + 5, plays=70, playUnit="seconds"),
+    # Due with the one-off, which gets snoozed while this one waits its turn: it must still ring.
+    dict(base, id="00000000-0000-4000-8000-0000000000A7", name="After a snooze", kind="once",
+         timeMinute=first_minute + 1),
 ]
 json.dump(alarms, open(sys.argv[1], "w"), indent=2)
 print(first_epoch)

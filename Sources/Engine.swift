@@ -128,10 +128,10 @@ final class Engine: NSObject {
         return test > 0 ? test : 5 * 60
     }
 
-    /// "Snooze 5 min" on the notification: stop the ring, and ring this alarm again five minutes from now.
+    /// "Snooze 5 min" on the notification: stop this alarm's ring, and ring it again five minutes from now.
     /// It rings even if the alarm has switched itself off since (a one-time alarm).
     func snoozeNow(_ id: UUID) {
-        Ringer.shared.stopAll()
+        Ringer.shared.stop(id)
         guard AlarmStore.shared.alarm(id) != nil else { return }
         let time = Date().addingTimeInterval(snoozeLength)
         snoozes[id] = time

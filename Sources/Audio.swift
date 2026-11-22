@@ -171,6 +171,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     private var queue: [Ring] = []
     private var current: Ring?
     private var notificationID: String?
+    private var postedWhileRinging: Set<String> = []   // the notifications of what's ringing now
     private var player: AVAudioPlayer?
     private var pending: DispatchWorkItem?
     private var saved: [AudioObjectID: (volume: Float?, muted: Bool)] = [:]   // each device as it was before ringing
@@ -196,6 +197,12 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         if current == nil { playNext() }
     }
 
+    /// A click on a notification of what's ringing now stops it all. An older notification kept in
+    /// Notification Center doesn't stop a different alarm that happens to be ringing.
+    func notificationClicked(_ id: String) {
+        if postedWhileRinging.contains(id) { stopAll() }
+    }
+
     /// Stops the sound right away and clears the notification (a click on the notification or on the blue bell,
     /// or quitting Ding), and puts the volume back.
     func stopAll() {
@@ -210,6 +217,18 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         setRinging(false)
     }
 
+    /// Stops one alarm (Snooze). Another alarm that rang at the same time still gets its turn.
+    func stop(_ id: UUID) {
+        queue.removeAll { $0.alarm.id == id }
+        guard current?.alarm.id == id else { return }
+        cancelPending()
+        player?.stop()
+        player = nil
+        finishNotification(after: 0)
+        current = nil
+        playNext()   // with nothing else waiting, this puts the volume back and the bell stops ringing
+    }
+
     private func playNext() {
         guard !queue.isEmpty else {
             restoreVolume()
@@ -219,7 +238,9 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         let ring = queue.removeFirst()
         current = ring
         setRinging(true)
-        notificationID = Notifier.shared.post(ring)
+        let posted = Notifier.shared.post(ring)
+        notificationID = posted
+        postedWhileRinging.insert(posted)
         let played = startSound(for: ring.alarm)
         RingLog.write("ring \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970) sound \(played ? "played" : "silent")")
         if let test = Ringer.testSnooze, test == ring.alarm.id, !testSnoozed {
@@ -325,6 +346,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     }
 
     private func setRinging(_ ringing: Bool) {
+        if !ringing { postedWhileRinging = [] }
         guard isRinging != ringing else { return }
         isRinging = ringing
         onChange?()

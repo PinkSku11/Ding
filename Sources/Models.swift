@@ -109,6 +109,22 @@ struct Alarm: Codable, Identifiable, Equatable {
         return trimmed.isEmpty ? "Alarm" : trimmed
     }
 
+    /// A duplicate's name: "Water break copy", then "Water break copy 2", like Finder.
+    /// A copy of a copy doesn't become "copy copy".
+    static func copyName(of name: String, taken: Set<String>) -> String {
+        var base = name
+        if let suffix = base.range(of: #" copy( [0-9]+)?$"#, options: .regularExpression) {
+            base.removeSubrange(suffix)
+        }
+        var candidate = base + " copy"
+        var number = 2
+        while taken.contains(candidate) {
+            candidate = "\(base) copy \(number)"
+            number += 1
+        }
+        return candidate
+    }
+
     var isOneOff: Bool { days.isEmpty }
 
     var intervalMinutes: Int { max(1, every) * (everyUnit == .hours ? 60 : 1) }

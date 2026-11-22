@@ -8,8 +8,9 @@ final class EditorModel: ObservableObject {
     @Published var alarm: Alarm
     @Published var kind: AlarmKind?          // nothing chosen yet for a new alarm
     @Published var confirmingDelete = false
+    @Published var isNew: Bool               // a new alarm, or a copy that isn't saved yet
+    @Published var focusName = 0             // bumped to put the cursor in the name box
     var choosingFile = false                 // the file chooser is open; don't close on outside clicks
-    let isNew: Bool
 
     init(alarm: Alarm, isNew: Bool) {
         self.alarm = alarm
@@ -26,8 +27,17 @@ final class EditorModel: ObservableObject {
         }
     }
 
-    var hasSoundToPlay: Bool {
-        !alarm.sound.isEmpty && alarm.plays > 0 && alarm.volume > 0
+    /// "Duplicate": the window becomes a new alarm with the same settings, named "… copy", ready to rename.
+    /// Nothing is saved until you click Save, and the original stays as it was saved.
+    func duplicate() {
+        var copy = alarm
+        copy.id = UUID()
+        copy.name = Alarm.copyName(of: alarm.displayName, taken: Set(AlarmStore.shared.alarms.map(\.displayName)))
+        copy.oneOffDay = nil   // a one-time copy works out its own day when saved
+        alarm = copy
+        confirmingDelete = false
+        isNew = true
+        focusName += 1
     }
 }
 
@@ -41,6 +51,7 @@ struct EditorView: View {
 
     @State private var systemSounds = SoundLibrary.system()
     @State private var customSounds = SoundLibrary.custom()
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,6 +64,10 @@ struct EditorView: View {
             Form {
                 Section {
                     TextField("Name", text: $model.alarm.name, prompt: Text("Alarm"))
+                        .focused($nameFocused)
+                        .onChange(of: model.focusName) {
+                            DispatchQueue.main.async { nameFocused = true }   // selects the name, ready to type over
+                        }
 
                     LabeledContent("Rings") {
                         KindPicker(kind: $model.kind)
@@ -161,6 +176,8 @@ struct EditorView: View {
                 } else {
                     Spacer()
                     if !model.isNew {
+                        Button("Duplicate") { model.duplicate() }
+                            .keyboardShortcut("d", modifiers: .command)
                         Button(role: .destructive) {
                             model.confirmingDelete = true
                         } label: {
@@ -551,5 +568,10 @@ final class EditorController: NSObject {
     private func delete() {
         AlarmStore.shared.delete(model.alarm.id)
         close()
+    }
+
+    /// The Duplicate button's action, for the build machine's test.
+    func duplicate() {
+        model.duplicate()
     }
 }

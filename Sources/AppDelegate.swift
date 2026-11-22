@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         Notifier.shared.setUp()
-        Notifier.shared.onClick = { Ringer.shared.stopAll() }
+        Notifier.shared.onClick = { id in Ringer.shared.notificationClicked(id) }
         Notifier.shared.onSnooze = { id in Engine.shared.snoozeNow(id) }
         Ringer.shared.onChange = { [weak self] in self?.refreshIcon() }
         AlarmStore.shared.onChange = { Engine.shared.recompute() }
@@ -77,6 +77,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         self?.use12Hour()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.openEditor(first) }
                     }
+                case "editor-duplicate":   // the editor, then Duplicate, as a click would
+                    self?.openEditor(AlarmStore.shared.alarms.first?.id)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self?.editor?.duplicate() }
                 case "editor": self?.openEditor(AlarmStore.shared.alarms.first?.id)
                 case "new": self?.openEditor(nil)
                 default: break
@@ -264,7 +267,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let snoozed = soonest.snoozed ? " (snoozed)" : ""
         return "Next: \(soonest.alarm.displayName) \(Format.when(soonest.time))\(snoozed)"
     }
-
 
     @objc private func use24Hour() {
         Settings.timeFormat = .twentyFourHour
