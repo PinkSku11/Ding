@@ -167,19 +167,26 @@ final class Engine: NSObject {
     private func tick() {
         let now = Date()
         var rings: [Ring] = []
+        var missed: [Ring] = []
         var finished: [UUID] = []
         var changed = false
 
         for alarm in AlarmStore.shared.alarms where alarm.isOn {
-            guard let time = due[alarm.id], now >= time else { continue }
+            guard var time = due[alarm.id], now >= time else { continue }
             changed = true
+            if alarm.kind == .once {
+                // The Mac may have slept through more than one of its rings: go by the latest.
+                time = Schedule.lastRing(for: alarm, from: time, upTo: now)
+            }
             let next = Schedule.nextRing(for: alarm, after: now)
             due[alarm.id] = next
-            // More than a minute late means the Mac was asleep or off: skip it quietly.
             if now.timeIntervalSince(time) <= 60 {
                 rings.append(Ring(alarm: alarm, time: time, next: next))
             } else {
+                // More than a minute late: the Mac was asleep. An alarm set for a time says it was missed;
+                // one that rings every few minutes or hours just carries on.
                 RingLog.write("skipped \(alarm.id.uuidString) due \(time.timeIntervalSince1970)")
+                if alarm.kind == .once { missed.append(Ring(alarm: alarm, time: time, next: next)) }
             }
             if next == nil && alarm.isOneOff {
                 finished.append(alarm.id)
@@ -195,12 +202,17 @@ final class Engine: NSObject {
                 rings.append(Ring(alarm: alarm, time: time, next: due[id], snoozed: true))
             } else {
                 RingLog.write("skipped \(id.uuidString) due \(time.timeIntervalSince1970)")
+                missed.append(Ring(alarm: alarm, time: time, next: due[id], snoozed: true))
             }
             saveSnoozes()
         }
 
         if !finished.isEmpty { AlarmStore.shared.switchOff(finished) }
         if !rings.isEmpty { Ringer.shared.enqueue(rings) }
+        for ring in missed {
+            RingLog.write("missed \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970)")
+            Notifier.shared.postMissed(ring, now: now)
+        }
 
         ticks += 1
         if changed || ticks % 30 == 0 {

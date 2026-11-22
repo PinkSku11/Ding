@@ -305,6 +305,8 @@ echo "== Preview experiment: pick sounds and move the volume like a person would
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 rm -f /tmp/ding-preview.log
 pkill -x Ding 2>/dev/null; sleep 1
+osascript -e 'set volume output volume 30'   # the Mac's own volume, which Ding must put back afterwards
+VOLUME_BEFORE=$(osascript -e 'output volume of (get volume settings)' 2>&1)
 open -n "$APP" --args -DingShow editor -DingDark YES -DingRingLog /tmp/ding-preview.log
 sleep 4
 POPUP_X=973; POPUP_Y=358            # the Sound box in the editor for the first sample alarm
@@ -329,6 +331,35 @@ echo "-- what Ding did:"
 awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-preview.log 2>/dev/null || echo "(no log)"
 cp /tmp/ding-preview.log "$OUT/preview-log.txt" 2>/dev/null
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+VOLUME_AFTER=$(osascript -e 'output volume of (get volume settings)' 2>&1)
+echo "-- the Mac's own volume: $VOLUME_BEFORE before, $VOLUME_AFTER after"
+python3 - /tmp/ding-preview.log "$VOLUME_BEFORE" "$VOLUME_AFTER" <<'PY' || TEST_OK=0
+import sys
+log, before, after = sys.argv[1], sys.argv[2], sys.argv[3]
+lines = [line.split(" ", 1)[1].strip() for line in open(log) if " " in line]
+volume = [line for line in lines if line.startswith("volume ")]
+replaced, bad = 0, []
+for i, line in enumerate(lines):
+    if line.startswith("preview stopped (a new one started)"):
+        replaced += 1
+        following = next((l for l in lines[i + 1:] if l.startswith("volume ")), "")
+        if not following.startswith("volume kept"):
+            bad.append(following or "nothing")
+saved = sum(l.startswith("volume saved") for l in volume)
+restored = sum(l.startswith("volume restored") for l in volume)
+print(f"   saved {saved} times, put back {restored} times, kept {len(volume) - saved - restored} times; "
+      f"{replaced} sounds replaced another")
+ok = True
+if bad:
+    print(f"FAIL: a sound that replaced another read the volume again: {bad}"); ok = False
+if saved != restored:
+    print(f"FAIL: saved {saved} times but put back {restored} times"); ok = False
+if before.isdigit() and after.isdigit() and before != after:
+    print(f"FAIL: the Mac's volume was {before} and is now {after}"); ok = False
+if ok:
+    print("OK: one sound replacing another keeps the Mac's own volume, which is put back at the end")
+sys.exit(0 if ok else 1)
+PY
 
 echo
 echo "== The note next to the sound: why a sound you try stays silent"
@@ -349,6 +380,23 @@ pkill -x Ding; sleep 1
 awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-note.log 2>/dev/null || echo "(no log)"
 if grep -q "preview silent-muted" /tmp/ding-note.log 2>/dev/null; then
     echo "OK: a sound tried on a muted Mac stays silent, and the note says why"
+else
+    echo "NOTE: the muted case didn't happen (this Mac's sound device may not mute)"
+fi
+echo "-- an alarm that rings on a muted Mac: its notification says why it's silent"
+rm -f /tmp/ding-silent.log
+osascript -e 'set volume with output muted'
+open -n "$APP" --args -DingShow ring -DingRingLog /tmp/ding-silent.log
+sleep 4
+osascript -e 'set volume without output muted'
+pkill -x Ding; sleep 1
+awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-silent.log 2>/dev/null || echo "(no log)"
+if grep -q "silent-muted" /tmp/ding-silent.log 2>/dev/null; then
+    if grep -q "^[0-9.]* notification ding\.[^ ]* | Water break | No sound: the Mac is muted | " /tmp/ding-silent.log; then
+        echo "OK: the notification of a silent ring says \"No sound: the Mac is muted\""
+    else
+        echo "FAIL: the silent ring's notification doesn't say why"; TEST_OK=0
+    fi
 else
     echo "NOTE: the muted case didn't happen (this Mac's sound device may not mute)"
 fi
@@ -416,6 +464,41 @@ if xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SD
     fi
 else
     echo "NOTE: the microphone stand-in didn't build"
+fi
+
+echo
+echo "== Missed while asleep: an alarm whose time passes while Ding can't run says so afterwards"
+EPOCH=$(date +%s)
+WAIT=$(( 60 - 10#$(date -r "$EPOCH" +%S) ))      # seconds until the next minute
+[ "$WAIT" -lt 15 ] && WAIT=$(( WAIT + 60 ))      # far enough ahead that Ding is standing still by then
+DUE=$(( EPOCH + WAIT ))
+MISS_MIN=$(( 10#$(date -r "$DUE" +%H) * 60 + 10#$(date -r "$DUE" +%M) ))
+cat > "$SUPPORT/alarms.json" <<JSON
+[{"id": "6F1C1D2E-0000-4000-8000-0000000000C1", "name": "Morning walk", "isOn": true, "kind": "once",
+  "fromMinute": 540, "untilMinute": 1380, "every": 15, "everyUnit": "minutes", "timeMinute": $MISS_MIN,
+  "days": [1, 2, 3, 4, 5, 6, 7], "sound": "Glass", "plays": 1, "playUnit": "times", "volume": 0.3,
+  "ringWhenMuted": false, "keepAwake": false},
+ {"id": "6F1C1D2E-0000-4000-8000-0000000000C2", "name": "Every minute", "isOn": true, "kind": "repeating",
+  "fromMinute": 0, "untilMinute": 0, "every": 1, "everyUnit": "minutes", "timeMinute": 0,
+  "days": [1, 2, 3, 4, 5, 6, 7], "sound": "", "plays": 1, "playUnit": "times", "volume": 0.3,
+  "ringWhenMuted": false, "keepAwake": false}]
+JSON
+rm -f /tmp/ding-missed.log
+FREEZE=$(( WAIT + 75 ))
+open -n "$APP" --args -DingTestFreeze $FREEZE -DingRingLog /tmp/ding-missed.log
+echo "Morning walk is due in $WAIT s; Ding stands still for $FREEZE s, as if the Mac were asleep..."
+sleep $(( FREEZE + 6 ))
+pkill -x Ding; sleep 1
+awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-missed.log 2>/dev/null || echo "(no log)"
+WALK=6F1C1D2E-0000-4000-8000-0000000000C1
+if grep -q " missed $WALK " /tmp/ding-missed.log 2>/dev/null \
+   && grep -q " notification ding\.missed\.$WALK | Morning walk |  | Missed at .* while your Mac was asleep" /tmp/ding-missed.log \
+   && ! grep -q " ring $WALK " /tmp/ding-missed.log \
+   && ! grep -q " missed 6F1C1D2E-0000-4000-8000-0000000000C2 " /tmp/ding-missed.log; then
+    echo "OK: the missed alarm set for a time didn't ring late; a notification says it was missed, and the"
+    echo "    alarm that rings every minute just carried on"
+else
+    echo "FAIL: the missed alarm wasn't reported as expected"; TEST_OK=0
 fi
 
 rm -f "$SUPPORT/alarms.json"

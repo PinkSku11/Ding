@@ -216,7 +216,8 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     }
 
     func enqueue(_ rings: [Ring]) {
-        if previewing { stopPreview(because: "an alarm rang") }
+        // The ring plays straight after, so the volume isn't put back in between (see restoreVolume).
+        if previewing { stopPreview(because: "an alarm rang", restoringVolume: false) }
         for ring in rings {
             // Still ringing from last time (a sound longer than the gap between rings): let that one finish,
             // rather than piling up rings that would play on and on.
@@ -270,10 +271,10 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         let ring = queue.removeFirst()
         current = ring
         setRinging(true)
-        let posted = Notifier.shared.post(ring)
+        let result = startSound(for: ring.alarm)
+        let posted = Notifier.shared.post(ring, silentBecause: result.note)   // a silent ring says why
         notificationID = posted
         postedWhileRinging.insert(posted)
-        let result = startSound(for: ring.alarm)
         let played = result == .played
         RingLog.write("ring \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970) sound \(played ? "played" : "silent") \(result.logWord)")
         if let test = Ringer.testSnooze, test == ring.alarm.id, !testSnoozed {
@@ -282,7 +283,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { Engine.shared.snoozeNow(test) }
         }
         if !played {
-            // No sound this time (Sound is None, a call, or the Mac is muted): just show the notification.
+            // No sound this time (Sound is None, a call, or the Mac is muted): just the notification.
             schedule(after: 5) { [weak self] in self?.ringFinished() }
         }
     }
@@ -313,7 +314,8 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         if alarm.sound.isEmpty || alarm.plays <= 0 || alarm.volume <= 0 { return .nothingToPlay }
         if let user = SystemAudio.microphoneUser() { return .microphone(user) }
         let device = SystemAudio.outputDevice
-        let muted = device.map(SystemAudio.isMuted) ?? false
+        // Straight after another sound, the Mac is as Ding left it, so go by how it was before.
+        let muted = device.map { saved[$0]?.muted ?? SystemAudio.isMuted($0) } ?? false
         if muted && !alarm.ringWhenMuted { return .muted }
         guard let url = SoundLibrary.url(for: alarm.sound),
               let newPlayer = try? AVAudioPlayer(contentsOf: url) else { return .failed }
@@ -325,8 +327,12 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         newPlayer.delegate = self
         newPlayer.volume = 1
         if let device {
-            if saved[device] == nil {
-                saved[device] = (SystemAudio.volume(of: device), muted)
+            if let before = saved[device] {
+                RingLog.write("volume kept \(Ringer.logVolume(before.volume))")
+            } else {
+                let volume = SystemAudio.volume(of: device)
+                saved[device] = (volume, muted)
+                RingLog.write("volume saved \(Ringer.logVolume(volume)) muted \(muted)")
             }
             if muted { SystemAudio.setMuted(false, device) }
             if SystemAudio.canSetVolume(of: device) {
@@ -379,12 +385,20 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     }
 
     /// Puts back the volume and mute of every device Ding changed, even if you've since switched to another one.
+    /// Only once nothing else plays straight after: macOS makes a change a moment after it's asked, so reading
+    /// the volume right after putting it back could give Ding's level instead of yours, and Ding would keep that.
     private func restoreVolume() {
         for (device, state) in saved {
             if let volume = state.volume { SystemAudio.setVolume(volume, of: device) }
             if state.muted { SystemAudio.setMuted(true, device) }
+            RingLog.write("volume restored \(Ringer.logVolume(state.volume))")
         }
         saved = [:]
+    }
+
+    /// A volume for the build machine's log: "0.30", or "none" for an output without a volume control.
+    private static func logVolume(_ volume: Float?) -> String {
+        volume.map { String(format: "%.2f", $0) } ?? "none"
     }
 
     private func setRinging(_ ringing: Bool) {
@@ -415,7 +429,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
             RingLog.write("preview silent-alarm-ringing sound \(alarm.sound)")
             return "No sound: an alarm is ringing"
         }
-        stopPreview(because: "a new one started")
+        stopPreview(because: "a new one started", restoringVolume: false)   // the new one plays straight after
         previewing = true
         let result = startSound(for: alarm)
         RingLog.write("preview \(result.logWord) sound \(alarm.sound) volume \(String(format: "%.2f", alarm.volume)) plays \(alarm.plays) \(alarm.playUnit.rawValue)")
@@ -423,13 +437,15 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         return result.note
     }
 
-    func stopPreview(because reason: String = "the editor closed") {
+    /// Stops the sound you're trying. `restoringVolume` is false when another sound starts right away,
+    /// which then puts the volume back when it ends.
+    func stopPreview(because reason: String = "the editor closed", restoringVolume: Bool = true) {
         guard previewing else { return }
         previewing = false
         cancelPending()
         if player != nil { RingLog.write("preview stopped (\(reason)) after \(elapsed)") }
         player?.stop()
         player = nil
-        restoreVolume()
+        if restoringVolume { restoreVolume() }
     }
 }

@@ -15,6 +15,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private let categoryID = "ding.ring"
     private let snoozeID = "ding.snooze"
     private let keepPrefix = "ding.keep."
+    private let missedPrefix = "ding.missed."
 
     private override init() {
         super.init()
@@ -31,13 +32,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         center.requestAuthorization(options: [.alert]) { _, _ in }
     }
 
-    /// Posts the notification for a ring and returns its id.
+    /// Posts the notification for a ring and returns its id. `silentBecause` says why there's no sound,
+    /// such as "No sound: the Mac is muted"; it shows under the alarm's name.
     @discardableResult
-    func post(_ ring: Ring) -> String {
+    func post(_ ring: Ring, silentBecause reason: String? = nil) -> String {
         // A kept notification has one id per alarm, so its next ring replaces it rather than adding another.
         let id = ring.alarm.keepNotification ? keepPrefix + ring.alarm.id.uuidString : "ding." + UUID().uuidString
         let content = UNMutableNotificationContent()
         content.title = ring.alarm.displayName
+        if let reason { content.subtitle = reason }
         var lines = [ring.snoozed ? "\(Format.time(ring.time)) (snoozed)" : Format.time(ring.time)]
         if let next = ring.next {
             lines.append(Format.nextLine(next, from: ring.time))
@@ -45,8 +48,29 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.body = lines.joined(separator: "\n")
         content.categoryIdentifier = categoryID
         content.userInfo = ["alarm": ring.alarm.id.uuidString]
-        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+        add(id, content)
         return id
+    }
+
+    private func add(_ id: String, _ content: UNMutableNotificationContent) {
+        RingLog.write("notification \(id) | \(content.title) | \(content.subtitle) | "
+                      + content.body.replacingOccurrences(of: "\n", with: " / "))
+        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
+            if let error { RingLog.write("notification \(id) not shown: \(error.localizedDescription)") }
+        }
+    }
+
+    /// An alarm the Mac slept through. It stays in Notification Center until you clear it, and a later miss
+    /// of the same alarm replaces it.
+    func postMissed(_ ring: Ring, now: Date = Date()) {
+        let content = UNMutableNotificationContent()
+        content.title = ring.alarm.displayName
+        let when = Format.past(ring.time, from: now)
+        content.body = ring.snoozed
+            ? "Missed its snooze \(when) while your Mac was asleep"
+            : "Missed \(when) while your Mac was asleep"
+        content.userInfo = ["alarm": ring.alarm.id.uuidString]
+        add(missedPrefix + ring.alarm.id.uuidString, content)
     }
 
     func remove(_ id: String, after seconds: TimeInterval) {
@@ -56,10 +80,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    // Show the banner; keep it in Notification Center only for alarms that keep their notification.
+    // Show the banner; keep it in Notification Center only for alarms that keep their notification,
+    // and for missed alarms.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        notification.request.identifier.hasPrefix(keepPrefix) ? [.banner, .list] : [.banner]
+        let id = notification.request.identifier
+        return id.hasPrefix(keepPrefix) || id.hasPrefix(missedPrefix) ? [.banner, .list] : [.banner]
     }
 
     // A click anywhere on the notification (or closing it) stops the sound; "Snooze 5 min" also rings it again later.

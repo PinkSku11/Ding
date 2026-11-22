@@ -321,6 +321,42 @@ do {
     check(Alarm.copyName(of: "Photocopy", taken: []) == "Photocopy copy", "a name that only ends in \"copy\"")
 }
 
+// MARK: Missed while the Mac slept
+
+do {
+    let daily = once(7 * 60, days: everyDay)
+    let monday7 = at(india, 2026, 11, 23, 7)
+    func last(_ alarm: Alarm, _ first: Date, _ upTo: Date) -> String {
+        text(india, Schedule.lastRing(for: alarm, from: first, upTo: upTo, calendar: india))
+    }
+    check(last(daily, monday7, at(india, 2026, 11, 23, 8)) == "2026-11-23 07:00:00", "slept through one ring")
+    check(last(daily, monday7, at(india, 2026, 11, 25, 8)) == "2026-11-25 07:00:00",
+          "slept through three rings: the latest, \(last(daily, monday7, at(india, 2026, 11, 25, 8)))")
+    check(last(daily, monday7, at(india, 2026, 11, 25, 6, 59)) == "2026-11-24 07:00:00", "a ring still ahead doesn't count")
+    let workdays = once(7 * 60, days: weekdays)
+    let friday7 = at(india, 2026, 11, 27, 7)
+    check(last(workdays, friday7, at(india, 2026, 11, 30, 9)) == "2026-11-30 07:00:00",
+          "over a weekend: Monday's ring, \(last(workdays, friday7, at(india, 2026, 11, 30, 9)))")
+}
+do {
+    let now = at(india, 2026, 11, 25, 9)   // Wednesday 09:00
+    let weekday = DateFormatter()
+    weekday.setLocalizedDateFormatFromTemplate("EEE")
+    let day = DateFormatter()
+    day.setLocalizedDateFormatFromTemplate("dMMM")
+    let today = at(india, 2026, 11, 25, 7)
+    check(Format.past(today, from: now) == "at \(Format.time(today))", "missed today: \(Format.past(today, from: now))")
+    let yesterday = at(india, 2026, 11, 24, 7)
+    check(Format.past(yesterday, from: now) == "yesterday at \(Format.time(yesterday))",
+          "missed yesterday: \(Format.past(yesterday, from: now))")
+    let monday7 = at(india, 2026, 11, 23, 7)
+    check(Format.past(monday7, from: now) == "on \(weekday.string(from: monday7)) at \(Format.time(monday7))",
+          "missed this week: \(Format.past(monday7, from: now))")
+    let longAgo = at(india, 2026, 11, 14, 7)
+    check(Format.past(longAgo, from: now) == "on \(day.string(from: longAgo)) at \(Format.time(longAgo))",
+          "missed over a week ago: \(Format.past(longAgo, from: now))")
+}
+
 // MARK: What counts as a call
 
 do {

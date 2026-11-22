@@ -65,6 +65,17 @@ enum Schedule {
         return best
     }
 
+    /// The alarm's last ring up to `date`, counting on from `first`, a ring it had then. After the Mac slept
+    /// through more than one ring of an alarm set for a time, this is the latest of them.
+    static func lastRing(for alarm: Alarm, from first: Date, upTo date: Date, calendar: Calendar = .current) -> Date {
+        var last = first
+        for _ in 0..<400 {   // more than a year of daily rings
+            guard let next = nextRing(for: alarm, after: last, calendar: calendar), next <= date else { break }
+            last = next
+        }
+        return last
+    }
+
     /// Whether the alarm, as it's set now, rings at `date`.
     static func rings(_ alarm: Alarm, at date: Date, calendar: Calendar = .current) -> Bool {
         nextRing(for: alarm, after: date.addingTimeInterval(-1), calendar: calendar) == date
@@ -102,11 +113,13 @@ enum Schedule {
 enum Format {
     private static var timeFormatters: [TimeFormat: DateFormatter] = [:]
     private static var savedWeekdayFormatter: DateFormatter?
+    private static var savedDayFormatter: DateFormatter?
 
     /// Starts the formatters afresh, after the region, the clock or the time zone changes.
     static func reset() {
         timeFormatters = [:]
         savedWeekdayFormatter = nil
+        savedDayFormatter = nil
     }
 
     /// Times as the Mac shows them, or in the 24-hour / AM/PM style picked in Ding's right-click menu.
@@ -131,6 +144,15 @@ enum Format {
         let formatter = DateFormatter()
         formatter.setLocalizedDateFormatFromTemplate("EEE")
         savedWeekdayFormatter = formatter
+        return formatter
+    }
+
+    /// Dates: "14 Nov", in the order the region uses.
+    private static var dayFormatter: DateFormatter {
+        if let formatter = savedDayFormatter { return formatter }
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("dMMM")
+        savedDayFormatter = formatter
         return formatter
     }
 
@@ -159,6 +181,20 @@ enum Format {
             return "tomorrow at \(time(date))"
         }
         return "on \(weekdayFormatter.string(from: date)) at \(time(date))"
+    }
+
+    /// When a missed ring was: "at 07:00", "yesterday at 07:00", "on Mon at 07:00", or over a week ago
+    /// "on 14 Nov at 07:00".
+    static func past(_ date: Date, from now: Date = Date()) -> String {
+        let calendar = Calendar.current
+        if calendar.isDate(date, inSameDayAs: now) { return "at \(time(date))" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
+            return "yesterday at \(time(date))"
+        }
+        if let sixDaysAgo = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now)), date >= sixDaysAgo {
+            return "on \(weekdayFormatter.string(from: date)) at \(time(date))"
+        }
+        return "on \(dayFormatter.string(from: date)) at \(time(date))"
     }
 
     /// The notification's last line: "Next at 21:00", "Next tomorrow at 09:00", "Next on Mon at 10:00"

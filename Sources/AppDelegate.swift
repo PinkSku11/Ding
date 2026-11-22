@@ -44,6 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
+        // The build machine's missed-alarm test: Ding stands still for a while, as if the Mac were asleep.
+        let freeze = UserDefaults.standard.double(forKey: "DingTestFreeze")
+        if freeze > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { Thread.sleep(forTimeInterval: freeze) }
+        }
+
         // Only used by the build machine, which opens these to take screenshots of the layout.
         if let show = UserDefaults.standard.string(forKey: "DingShow") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
@@ -84,6 +90,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     self?.openEditor(AlarmStore.shared.alarms.first?.id)
                     let text = UserDefaults.standard.string(forKey: "DingTestNote") ?? "No sound: the Mac is muted"
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.editor?.showNote(text) }
+                case "ring":   // the first alarm rings now, as at its time
+                    if let alarm = AlarmStore.shared.alarms.first {
+                        let now = Date()
+                        Ringer.shared.enqueue([Ring(alarm: alarm, time: now, next: Schedule.nextRing(for: alarm, after: now))])
+                    }
                 case "editor": self?.openEditor(AlarmStore.shared.alarms.first?.id)
                 case "new": self?.openEditor(nil)
                 default: break
