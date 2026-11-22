@@ -204,8 +204,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         cancelPending()
         player?.stop()
         player = nil
-        if let id = notificationID { Notifier.shared.remove(id, after: 0) }
-        notificationID = nil
+        finishNotification(after: 0)
         current = nil
         restoreVolume()
         setRinging(false)
@@ -238,10 +237,21 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         cancelPending()
         player?.stop()
         player = nil
-        if let id = notificationID { Notifier.shared.remove(id, after: 4) }
-        notificationID = nil
+        finishNotification(after: 4)
         current = nil
         playNext()
+    }
+
+    /// After a ring: clear its notification, unless the alarm keeps it in Notification Center.
+    private func finishNotification(after seconds: TimeInterval) {
+        guard let id = notificationID, let ring = current else { return }
+        notificationID = nil
+        if ring.alarm.keepNotification {
+            RingLog.write("keep \(ring.alarm.id.uuidString)")
+        } else {
+            RingLog.write("clear \(ring.alarm.id.uuidString)")
+            Notifier.shared.remove(id, after: seconds)
+        }
     }
 
     /// Starts an alarm's sound following its settings. Returns false when it should stay silent.

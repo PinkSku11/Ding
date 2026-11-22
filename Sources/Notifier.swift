@@ -1,8 +1,8 @@
 import Foundation
 import UserNotifications
 
-/// Shows a normal Mac notification for each ring and removes it again afterwards,
-/// so nothing piles up in Notification Center.
+/// Shows a normal Mac notification for each ring. Ding removes it again after the ring, so nothing piles up
+/// in Notification Center, unless the alarm keeps it there ("Keep in Notification Center").
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = Notifier()
 
@@ -14,6 +14,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private let center = UNUserNotificationCenter.current()
     private let categoryID = "ding.ring"
     private let snoozeID = "ding.snooze"
+    private let keepPrefix = "ding.keep."
 
     private override init() {
         super.init()
@@ -33,7 +34,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// Posts the notification for a ring and returns its id.
     @discardableResult
     func post(_ ring: Ring) -> String {
-        let id = "ding." + UUID().uuidString
+        // A kept notification has one id per alarm, so its next ring replaces it rather than adding another.
+        let id = ring.alarm.keepNotification ? keepPrefix + ring.alarm.id.uuidString : "ding." + UUID().uuidString
         let content = UNMutableNotificationContent()
         content.title = ring.alarm.displayName
         var lines = [ring.snoozed ? "\(Format.time(ring.time)) (snoozed)" : Format.time(ring.time)]
@@ -54,10 +56,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    // Show the banner, but don't keep it in Notification Center.
+    // Show the banner; keep it in Notification Center only for alarms that keep their notification.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner]
+        notification.request.identifier.hasPrefix(keepPrefix) ? [.banner, .list] : [.banner]
     }
 
     // A click anywhere on the notification (or closing it) stops the sound; "Snooze 5 min" also rings it again later.

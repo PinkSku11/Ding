@@ -6,7 +6,7 @@ log_path, alarms_path, first = sys.argv[1], sys.argv[2], float(sys.argv[3])
 A, B, C, D, E, F = ("00000000-0000-4000-8000-0000000000" + s for s in ("A1", "B2", "C3", "D4", "E5", "F6"))
 names = {A: "Every minute", B: "One-off", C: "Same minute", D: "Switched off", E: "Silent", F: "Long sound"}
 
-rings, offs, skipped, busy, snoozes = {}, set(), [], {}, set()
+rings, offs, skipped, busy, snoozes, kept, cleared = {}, set(), [], {}, set(), set(), set()
 for line in open(log_path):
     parts = line.split()
     if len(parts) < 3:
@@ -22,6 +22,10 @@ for line in open(log_path):
         busy.setdefault(alarm, []).append(round((float(parts[4]) - first) / 60))
     elif kind == "snooze":
         snoozes.add(alarm)
+    elif kind == "keep":
+        kept.add(alarm)
+    elif kind == "clear":
+        cleared.add(alarm)
 
 problems = []
 
@@ -70,6 +74,11 @@ if busy.get(F) != [5]:
     problems.append(f"the long sound's second ring should have been let go while the first played; busy: {busy.get(F)}")
 if set(busy) - {F}:
     problems.append(f"other alarms were let go as busy: {[names.get(a, a) for a in set(busy) - {F}]}")
+print(f"  Notifications left in Notification Center: {[names.get(a, a) for a in kept]}; cleared: {sorted(names.get(a, a) for a in cleared)}")
+if kept != {C}:
+    problems.append(f"kept notifications for {[names.get(a, a) for a in kept]}, expected only {names[C]}")
+if C in cleared or not {A, B, E, F} <= cleared:
+    problems.append(f"cleared notifications for {[names.get(a, a) for a in cleared]}")
 if B not in offs:
     problems.append("the one-off alarm didn't switch itself off")
 saved = {a["id"]: a for a in json.load(open(alarms_path))}

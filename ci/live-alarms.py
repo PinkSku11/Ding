@@ -24,7 +24,8 @@ alarms = [
          fromMinute=first_minute, untilMinute=first_minute + 4),
     dict(base, id="00000000-0000-4000-8000-0000000000B2", name="One-off", kind="once",
          timeMinute=first_minute + 1, days=[], oneOffDay=apple_epoch),
-    dict(base, id="00000000-0000-4000-8000-0000000000C3", name="Same minute", kind="once",
+    # Also keeps its notification in Notification Center after the ring.
+    dict(base, id="00000000-0000-4000-8000-0000000000C3", name="Same minute", kind="once", keepNotification=True,
          timeMinute=first_minute + 2),
     dict(base, id="00000000-0000-4000-8000-0000000000D4", name="Switched off", kind="repeating",
          fromMinute=first_minute, untilMinute=first_minute + 4, isOn=False),

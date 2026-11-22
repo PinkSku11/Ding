@@ -35,6 +35,7 @@ struct Alarm: Codable, Identifiable, Equatable {
     var volume: Double           // 0…1, the Mac's output volume while the alarm plays
     var ringWhenMuted: Bool
     var keepAwake: Bool          // keep the Mac from sleeping while this alarm is running
+    var keepNotification: Bool   // leave the notification in Notification Center after the ring
 
     init(id: UUID = UUID(),
          name: String = "",
@@ -52,7 +53,8 @@ struct Alarm: Codable, Identifiable, Equatable {
          playUnit: PlayUnit = .times,
          volume: Double = 0.8,
          ringWhenMuted: Bool = false,
-         keepAwake: Bool = false) {
+         keepAwake: Bool = false,
+         keepNotification: Bool = false) {
         self.id = id
         self.name = name
         self.isOn = isOn
@@ -70,11 +72,12 @@ struct Alarm: Codable, Identifiable, Equatable {
         self.volume = volume
         self.ringWhenMuted = ringWhenMuted
         self.keepAwake = keepAwake
+        self.keepNotification = keepNotification
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, isOn, kind, fromMinute, untilMinute, every, everyUnit, timeMinute
-        case days, oneOffDay, sound, plays, playUnit, volume, ringWhenMuted, keepAwake
+        case days, oneOffDay, sound, plays, playUnit, volume, ringWhenMuted, keepAwake, keepNotification
     }
 
     // Tolerant decoding, so alarms saved by an older version still load.
@@ -98,6 +101,7 @@ struct Alarm: Codable, Identifiable, Equatable {
         volume = try c.decodeIfPresent(Double.self, forKey: .volume) ?? d.volume
         ringWhenMuted = try c.decodeIfPresent(Bool.self, forKey: .ringWhenMuted) ?? d.ringWhenMuted
         keepAwake = try c.decodeIfPresent(Bool.self, forKey: .keepAwake) ?? d.keepAwake
+        keepNotification = try c.decodeIfPresent(Bool.self, forKey: .keepNotification) ?? d.keepNotification
     }
 
     var displayName: String {

@@ -299,6 +299,12 @@ do {
     check(list?.count == 1, "an older file still loads")
     check(list?.first?.keepAwake == false && list?.first?.sound == "Glass" && list?.first?.isOn == true,
           "missing settings get their defaults")
+    check(list?.first?.keepNotification == false, "older alarms clear their notification after the ring, as before")
+
+    var kept = Alarm()
+    kept.keepNotification = true
+    let again = (try? JSONEncoder().encode([kept])).flatMap { try? JSONDecoder().decode([Alarm].self, from: $0) }
+    check(again?.first?.keepNotification == true, "Keep in Notification Center is saved")
 }
 
 print("\(checks - failures) of \(checks) checks passed")

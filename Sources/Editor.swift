@@ -136,6 +136,9 @@ struct EditorView: View {
 
                     Toggle("Keep Mac awake for this alarm", isOn: $model.alarm.keepAwake)
                         .toggleStyle(.switch)
+
+                    Toggle("Keep in Notification Center", isOn: $model.alarm.keepNotification)
+                        .toggleStyle(.switch)
                 }
             }
             .formStyle(.grouped)
@@ -179,9 +182,9 @@ struct EditorView: View {
 
     private var formHeight: CGFloat {
         switch model.kind {
-        case .some(.repeating): return 497
-        case .some(.once): return 415
-        case .none: return 375
+        case .some(.repeating): return 534
+        case .some(.once): return 452
+        case .none: return 412
         }
     }
 
