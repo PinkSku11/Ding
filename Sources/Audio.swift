@@ -105,18 +105,54 @@ enum SystemAudio {
         return Array(list.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
     }
 
-    /// True when sound goes to headphones: AirPods and other Bluetooth audio, or wired headphones.
+    /// True when sound goes to something worn: AirPods and other Bluetooth audio, wired headphones,
+    /// or a USB headset.
     static func isHeadphones() -> Bool {
-        guard let device = outputDevice,
-              let transport = readUInt32(device, kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal) else { return false }
-        if transport == UInt32(kAudioDeviceTransportTypeBluetooth) || transport == UInt32(kAudioDeviceTransportTypeBluetoothLE) {
-            return true
+        guard let device = outputDevice else { return false }
+        if let transport = readUInt32(device, kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal) {
+            if transport == UInt32(kAudioDeviceTransportTypeBluetooth) || transport == UInt32(kAudioDeviceTransportTypeBluetoothLE) {
+                return true
+            }
+            if transport == UInt32(kAudioDeviceTransportTypeBuiltIn),
+               readUInt32(device, kAudioDevicePropertyDataSource, kAudioDevicePropertyScopeOutput) == 0x6864_706E {
+                return true   // 'hdpn': headphones in the jack, on Macs that switch the speakers over
+            }
         }
-        if transport == UInt32(kAudioDeviceTransportTypeBuiltIn),
-           let source = readUInt32(device, kAudioDevicePropertyDataSource, kAudioDevicePropertyScopeOutput) {
-            return source == 0x6864_706E   // 'hdpn', the headphone jack
+        if outputIsWorn(device) { return true }
+        // By name, as a last check: "External Headphones" (the jack on newer Macs), "… Headset", "AirPods".
+        let name = deviceName(device).lowercased()
+        return ["headphone", "headset", "airpods", "earbuds", "earphones"].contains { name.contains($0) }
+    }
+
+    /// Whether the device says its output is headphones or a headset.
+    private static func outputIsWorn(_ device: AudioObjectID) -> Bool {
+        var addr = address(kAudioDevicePropertyStreams, kAudioDevicePropertyScopeOutput)
+        var size = UInt32(0)
+        guard AudioObjectGetPropertyDataSize(device, &addr, 0, nil, &size) == noErr, size > 0 else { return false }
+        var streams = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &streams) == noErr else { return false }
+        let worn: Set<UInt32> = [
+            0x6864_7068,                // 'hdph': headphones
+            0x0302, 0x0303,             // USB: headphones, head-mounted audio
+            0x0401, 0x0402,             // USB: handset, headset
+        ]
+        return streams.contains { stream in
+            readUInt32(stream, kAudioStreamPropertyTerminalType, kAudioObjectPropertyScopeGlobal).map(worn.contains) ?? false
         }
-        return false
+    }
+
+    /// The output's name, such as "MacBook Pro Speakers" or "AirPods Pro".
+    static var outputName: String { outputDevice.map(deviceName) ?? "none" }
+
+    private static func deviceName(_ device: AudioObjectID) -> String {
+        var addr = address(kAudioObjectPropertyName)
+        var name: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        let status = withUnsafeMutablePointer(to: &name) { pointer in
+            AudioObjectGetPropertyData(device, &addr, 0, nil, &size, pointer)
+        }
+        guard status == noErr, let value = name?.takeRetainedValue() else { return "" }
+        return value as String
     }
 }
 
@@ -126,8 +162,8 @@ enum SystemAudio {
 final class Ringer: NSObject, AVAudioPlayerDelegate {
     static let shared = Ringer()
 
-    /// Highest output volume used when headphones are connected.
-    private let headphoneCap: Float = 0.5
+    /// Highest output volume used with AirPods, headphones or a headset.
+    private let headphoneCap: Float = 0.3
 
     private(set) var isRinging = false
     var onChange: (() -> Void)?
@@ -212,7 +248,9 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
               let newPlayer = try? AVAudioPlayer(contentsOf: url) else { return false }
 
         var level = Float(alarm.volume)
-        if SystemAudio.isHeadphones() { level = min(level, headphoneCap) }
+        let worn = SystemAudio.isHeadphones()
+        if worn { level = min(level, headphoneCap) }
+        RingLog.write("sound \(alarm.id.uuidString) to \(SystemAudio.outputName.replacingOccurrences(of: " ", with: "_")) worn \(worn) level \(level)")
         newPlayer.delegate = self
         newPlayer.volume = 1
         if let device {

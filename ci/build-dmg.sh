@@ -223,6 +223,7 @@ if [ -n "$FIRST" ]; then
     pkill -x Ding
     sleep 1
     cp /tmp/ding-rings.log "$OUT/ring-log.txt" 2>/dev/null
+    echo "Output and volume for the first ring: $(grep -m1 ' sound ' /tmp/ding-rings.log | cut -d' ' -f4-)"
     python3 ci/check-live.py /tmp/ding-rings.log "$SUPPORT/alarms.json" "$FIRST" || fail "live test"
 else
     echo "(live test skipped: too close to midnight)"

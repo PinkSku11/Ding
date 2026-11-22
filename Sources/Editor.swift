@@ -218,16 +218,18 @@ struct EditorView: View {
         )
     }
 
-    /// Plays the sound you just picked, once, at the alarm's volume.
-    /// While Volume is still at 0 (a new alarm), it plays at half volume so you can hear it.
+    /// Plays the sound you just picked for as long as the alarm will play it (Play sound), at its volume.
+    /// While Play sound or Volume is still 0 (a new alarm), it plays once, at half volume, so you can hear it.
     private func playSample() {
         guard !model.alarm.sound.isEmpty else {
             Ringer.shared.stopPreview()
             return
         }
         var sample = model.alarm
-        sample.plays = 1
-        sample.playUnit = .times
+        if sample.plays <= 0 {
+            sample.plays = 1
+            sample.playUnit = .times
+        }
         if sample.volume <= 0 { sample.volume = 0.5 }
         Ringer.shared.preview(sample) {}
     }

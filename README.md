@@ -15,7 +15,7 @@ Ding is the bell in the menu bar. Click it for your alarms. Right-click it to ch
 - Ding rings only while it's open, so turn on Open at login if you want it there after a restart.
 - Alarms can't ring while the Mac is asleep. Turn on "Keep Mac awake for this alarm" for the alarms that matter; it can't help when the lid is closed.
 - Ding stays quiet, and shows only the notification, while an app is using the microphone (a call), when the alarm's sound is None or its volume is 0, and when the Mac is muted, unless "Ring even when muted" is on.
-- With headphones connected, alarms play at half volume at most.
+- With AirPods, headphones or a headset, alarms play at 30% volume at most.
 
 ## How it's built
 
