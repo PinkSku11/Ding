@@ -80,6 +80,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 case "editor-duplicate":   // the editor, then Duplicate, as a click would
                     self?.openEditor(AlarmStore.shared.alarms.first?.id)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self?.editor?.duplicate() }
+                case "editor-note":   // the editor with a note beside the buttons, to check how it fits
+                    self?.openEditor(AlarmStore.shared.alarms.first?.id)
+                    let text = UserDefaults.standard.string(forKey: "DingTestNote") ?? "No sound: the Mac is muted"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.editor?.showNote(text) }
                 case "editor": self?.openEditor(AlarmStore.shared.alarms.first?.id)
                 case "new": self?.openEditor(nil)
                 default: break

@@ -331,6 +331,35 @@ cp /tmp/ding-preview.log "$OUT/preview-log.txt" 2>/dev/null
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 
 echo
+echo "== The note beside the buttons: why a sound you try stays silent"
+rm -f /tmp/ding-note.log
+osascript -e 'set volume with output muted'
+echo "Mac muted: $(osascript -e 'output muted of (get volume settings)' 2>&1)"
+open -n "$APP" --args -DingShow editor -DingDark YES -DingRingLog /tmp/ding-note.log
+sleep 4
+python3 ci/click.py click $POPUP_X $POPUP_Y; sleep 0.6   # the next sound, on a muted Mac (Water break doesn't ring when muted)
+python3 ci/click.py key down; sleep 0.15
+python3 ci/click.py key return; sleep 1.5
+screencapture -x "$OUT/preview-note-muted.png"
+osascript -e 'set volume without output muted'
+echo "Mac muted: $(osascript -e 'output muted of (get volume settings)' 2>&1)"
+sleep 6
+screencapture -x "$OUT/preview-note-gone.png"
+pkill -x Ding; sleep 1
+awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-note.log 2>/dev/null || echo "(no log)"
+if grep -q "preview silent-muted" /tmp/ding-note.log 2>/dev/null; then
+    echo "OK: a sound tried on a muted Mac stays silent, and the note says why"
+else
+    echo "NOTE: the muted case didn't happen (this Mac's sound device may not mute)"
+fi
+echo "-- a long app name in the note"
+open -n "$APP" --args -DingShow editor-note -DingTestNote "No sound: Microsoft Teams is using the mic" -DingDark YES
+sleep 4
+screencapture -x "$OUT/preview-note-long.png"
+pkill -x Ding; sleep 1
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+
+echo
 echo "== A Mac set to 24-hour time: Ding follows it, and AM/PM can still be picked"
 defaults write -g AppleICUForce24HourTime -bool true
 shoot options blue-options-mac24 dark || TEST_OK=0

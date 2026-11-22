@@ -35,7 +35,7 @@ final class EditorModel: ObservableObject {
         guard text != nil else { return }
         let timer = DispatchWorkItem { [weak self] in self?.note = nil }
         noteTimer = timer
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: timer)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: timer)   // long enough to notice after a pause
     }
 
     /// "Duplicate": the window becomes a new alarm with the same settings, named "… copy", ready to rename.
@@ -191,7 +191,8 @@ struct EditorView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .truncationMode(.tail)
+                            .truncationMode(.middle)   // a long app name loses its middle, never "is using the mic"
+                            .help(note)
                             .padding(.leading, 10)
                             .transition(.opacity)
                     }
@@ -598,5 +599,10 @@ final class EditorController: NSObject {
     /// The Duplicate button's action, for the build machine's test.
     func duplicate() {
         model.duplicate()
+    }
+
+    /// Shows a note beside the buttons, for the build machine's layout check.
+    func showNote(_ text: String) {
+        model.showNote(text)
     }
 }
