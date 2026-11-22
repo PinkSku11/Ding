@@ -17,7 +17,7 @@ When an alarm rings, click its notification or the bell to stop it, or click Sno
 - Ding rings only while it's open, so turn on Open at login if you want it there after a restart.
 - Alarms can't ring while the Mac is asleep. Turn on "Keep Mac awake for this alarm" for the alarms that matter; it can't help when the lid is closed.
 - Ding stays quiet, and shows only the notification, while an app is using the microphone (a call), when the alarm's sound is None or its volume is 0, and when the Mac is muted, unless "Ring even when muted" is on.
-- When you pick a sound or let go of the volume slider, Ding plays it for you. If it stays quiet because an app is using the microphone, the Mac is muted or an alarm is ringing, a note beside the buttons says so.
+- When you pick a sound or let go of the volume slider, Ding plays it for you. If it stays quiet because an app is using the microphone, the Mac is muted or an alarm is ringing, a note next to the sound says so.
 - With AirPods, headphones or a headset, alarms play at 30% volume at most.
 - A Focus such as Do Not Disturb hides Ding's notifications unless Ding is one of its allowed apps, but the alarm sound still plays.
 

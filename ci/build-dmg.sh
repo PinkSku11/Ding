@@ -331,7 +331,7 @@ cp /tmp/ding-preview.log "$OUT/preview-log.txt" 2>/dev/null
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 
 echo
-echo "== The note beside the buttons: why a sound you try stays silent"
+echo "== The note next to the sound: why a sound you try stays silent"
 rm -f /tmp/ding-note.log
 osascript -e 'set volume with output muted'
 echo "Mac muted: $(osascript -e 'output muted of (get volume settings)' 2>&1)"

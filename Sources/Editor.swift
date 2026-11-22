@@ -108,7 +108,18 @@ struct EditorView: View {
                     }
 
                     LabeledContent("Sound") {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
+                            if let note = model.note {
+                                // Why the sound you just tried stayed quiet, beside the sound itself.
+                                Text(verbatim: note)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)   // a long app name loses its middle, never "is using the mic"
+                                    .help(note)
+                                    .layoutPriority(-1)
+                                    .transition(.opacity)
+                            }
                             Picker("Sound", selection: soundBinding) {
                                 Text("None").tag("")
                                 Section("Mac sounds") {
@@ -127,6 +138,7 @@ struct EditorView: View {
                             .fixedSize()
                             .padding(.trailing, -3)   // line the arrows up with the controls above and below
                         }
+                        .animation(.easeInOut(duration: 0.2), value: model.note)
                     }
 
                     LabeledContent("Play sound") {
@@ -186,17 +198,7 @@ struct EditorView: View {
                         Text("Delete").foregroundStyle(.red)
                     }
                 } else {
-                    if let note = model.note {
-                        Text(verbatim: note)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)   // a long app name loses its middle, never "is using the mic"
-                            .help(note)
-                            .padding(.leading, 10)
-                            .transition(.opacity)
-                    }
-                    Spacer(minLength: 8)
+                    Spacer()
                     if !model.isNew {
                         Button("Duplicate") { model.duplicate() }
                             .keyboardShortcut("d", modifiers: .command)
@@ -215,7 +217,6 @@ struct EditorView: View {
             .padding(.horizontal, 20)
             .padding(.top, 0)
             .padding(.bottom, 18)
-            .animation(.easeInOut(duration: 0.2), value: model.note)
         }
         .frame(width: 520)
     }
@@ -601,7 +602,7 @@ final class EditorController: NSObject {
         model.duplicate()
     }
 
-    /// Shows a note beside the buttons, for the build machine's layout check.
+    /// Shows a note next to the sound, for the build machine's layout check.
     func showNote(_ text: String) {
         model.showNote(text)
     }
