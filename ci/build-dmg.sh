@@ -664,10 +664,10 @@ rm -f "$SUPPORT/alarms.json"
 echo
 echo "== Snoozed for longer than its gap: an alarm that rings every minute stays quiet until the snooze is up"
 EPOCH=$(date +%s)
-WAIT=$(( 60 - 10#$(date -r "$EPOCH" +%S) ))      # seconds until the next minute
-[ "$WAIT" -lt 40 ] && WAIT=$(( WAIT + 60 ))      # time to look at the list first
-QUIET=$(( EPOCH + WAIT ))                        # a ring due while it's snoozed
-UP=$(( QUIET + 30 ))                             # the snooze is up half a minute later
+# defaults -float keeps a 32-bit number, which holds times like these only to the nearest 128 seconds:
+# a multiple of 128 comes through exactly.
+UP=$(( (EPOCH + 90 + 127) / 128 * 128 ))         # when the snooze is up, 1½ to 3½ minutes from now
+QUIET=$(( (UP - 1) / 60 * 60 ))                  # the alarm's last usual ring before that, due while it's snoozed
 SNOOZED=6F1C1D2E-0000-4000-8000-0000000000D1
 cat > "$SUPPORT/alarms.json" <<JSON
 [{"id": "$SNOOZED", "name": "Water break", "isOn": true, "kind": "repeating",
@@ -684,7 +684,7 @@ screencapture -x "$OUT/menu-snoozed-every-minute.png"
 pkill -x Ding; sleep 1
 open -n "$APP" --args -DingRingLog /tmp/ding-snoozed.log
 echo "A ring is due in $(( QUIET - $(date +%s) )) s; the alarm is snoozed until $(( UP - $(date +%s) )) s from now..."
-sleep $(( UP - $(date +%s) + 40 ))     # past the snooze, and the usual ring after it
+sleep $(( QUIET + 70 - $(date +%s) ))     # past the snooze, and the usual ring after it
 pkill -x Ding; sleep 1
 defaults delete com.shriya.Ding snoozes 2>/dev/null
 show_log /tmp/ding-snoozed.log

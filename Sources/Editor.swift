@@ -93,6 +93,7 @@ struct EditorView: View {
                     LabeledContent("Rings") {
                         KindPicker(kind: $model.kind)
                     }
+                    .labeledContentStyle(LevelRow())
 
                     if model.kind == .repeating {
                         LabeledContent("From") {
@@ -123,6 +124,7 @@ struct EditorView: View {
                     LabeledContent("Days") {
                         DaysPicker(days: $model.alarm.days)
                     }
+                    .labeledContentStyle(LevelRow())
 
                     LabeledContent("Sound") {
                         HStack(spacing: 8) {
@@ -310,12 +312,17 @@ struct EditorView: View {
 
 // MARK: - Rings "Repeatedly" / "Once", each in its own bubble like the days
 
-/// Where the words in the bubbles sit, so the label of their row ("Rings", "Days") lines up with them
-/// instead of sitting a little higher.
-private let bubbleTextBelowMiddle: CGFloat = {
-    let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
-    return (font.ascender + font.descender) / 2   // the line of text, centred in its bubble
-}()
+/// For the rows of bubbles (Rings and Days), which are taller than the other controls: the label sits level with
+/// the middle of the bubbles. The form's own layout put it a little higher than the words in them.
+private struct LevelRow: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .center) {
+            configuration.label
+            Spacer(minLength: 8)
+            configuration.content
+        }
+    }
+}
 
 struct KindPicker: View {
     @Binding var kind: AlarmKind?
@@ -325,7 +332,6 @@ struct KindPicker: View {
             pill("Repeatedly", .repeating)
             pill("Once", .once)
         }
-        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + bubbleTextBelowMiddle }
     }
 
     private func pill(_ title: String, _ value: AlarmKind) -> some View {
@@ -381,7 +387,6 @@ struct DaysPicker: View {
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + bubbleTextBelowMiddle }
     }
 }
 
