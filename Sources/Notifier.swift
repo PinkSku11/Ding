@@ -31,6 +31,19 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                                               options: [.customDismissAction])
         center.setNotificationCategories([category])
         center.requestAuthorization(options: [.alert]) { _, _ in }
+        clearLeftovers()
+    }
+
+    /// The notifications of rings that were already over when Ding last quit, before it could clear them.
+    private func clearLeftovers() {
+        let launched = Date()
+        let kept = [keepPrefix, missedPrefix]
+        center.getDeliveredNotifications { [center] notes in
+            let old = notes
+                .filter { note in note.date < launched && !kept.contains { note.request.identifier.hasPrefix($0) } }
+                .map(\.request.identifier)
+            if !old.isEmpty { center.removeDeliveredNotifications(withIdentifiers: old) }
+        }
     }
 
     /// Posts the notification for a ring and returns its id. `silentBecause` says why there's no sound,

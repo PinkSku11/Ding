@@ -106,8 +106,9 @@ final class Engine: NSObject {
         onStateChange?()
     }
 
+    /// When the alarm rings next: when its snooze is up, if it's snoozed (it stays quiet until then).
     func nextRing(for id: UUID) -> Date? {
-        due[id]
+        snoozes[id] ?? due[id]
     }
 
     var hasSnoozes: Bool { !snoozes.isEmpty }
@@ -116,11 +117,10 @@ final class Engine: NSObject {
     func soonest() -> Ring? {
         var best: Ring?
         for alarm in AlarmStore.shared.alarms {
-            if alarm.isOn, let time = due[alarm.id], best == nil || time < best!.time {
-                best = Ring(alarm: alarm, time: time, next: nil)
-            }
-            if let time = snoozes[alarm.id], best == nil || time < best!.time {
-                best = Ring(alarm: alarm, time: time, next: nil, snoozed: true)
+            let snoozed = snoozes[alarm.id]
+            guard let time = snoozed ?? (alarm.isOn ? due[alarm.id] : nil) else { continue }
+            if best == nil || time < best!.time {
+                best = Ring(alarm: alarm, time: time, next: nil, snoozed: snoozed != nil)
             }
         }
         return best
@@ -135,7 +135,7 @@ final class Engine: NSObject {
     }
 
     /// A snooze button on the notification: stop this alarm's ring, and ring it again that many minutes from now.
-    /// It rings even if the alarm has switched itself off since (a one-time alarm).
+    /// Until then it stays quiet. It rings even if the alarm has switched itself off since (a one-time alarm).
     func snoozeNow(_ id: UUID, minutes: Int) {
         Ringer.shared.stop(id)
         guard AlarmStore.shared.alarm(id) != nil else { return }
@@ -186,7 +186,10 @@ final class Engine: NSObject {
             }
             let next = Schedule.nextRing(for: alarm, after: now)
             due[alarm.id] = next
-            if now.timeIntervalSince(time) <= 60 {
+            if let snoozed = snoozes[alarm.id], snoozed > now {
+                // Snoozed: it stays quiet until the snooze is up, even an alarm that rings every few minutes.
+                RingLog.write("quiet \(alarm.id.uuidString) due \(time.timeIntervalSince1970)")
+            } else if now.timeIntervalSince(time) <= 60 {
                 rings.append(Ring(alarm: alarm, time: time, next: next))
             } else {
                 // More than a minute late: the Mac was asleep. An alarm set for a time says it was missed;

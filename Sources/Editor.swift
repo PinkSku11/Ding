@@ -310,6 +310,13 @@ struct EditorView: View {
 
 // MARK: - Rings "Repeatedly" / "Once", each in its own bubble like the days
 
+/// Where the words in the bubbles sit, so the label of their row ("Rings", "Days") lines up with them
+/// instead of sitting a little higher.
+private let bubbleTextBelowMiddle: CGFloat = {
+    let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    return (font.ascender + font.descender) / 2   // the line of text, centred in its bubble
+}()
+
 struct KindPicker: View {
     @Binding var kind: AlarmKind?
 
@@ -318,6 +325,7 @@ struct KindPicker: View {
             pill("Repeatedly", .repeating)
             pill("Once", .once)
         }
+        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + bubbleTextBelowMiddle }
     }
 
     private func pill(_ title: String, _ value: AlarmKind) -> some View {
@@ -373,6 +381,7 @@ struct DaysPicker: View {
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
+        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + bubbleTextBelowMiddle }
     }
 }
 

@@ -660,6 +660,63 @@ else
     echo "FAIL: the missed alarm wasn't reported as expected"; TEST_OK=0
 fi
 rm -f "$SUPPORT/alarms.json"
+
+echo
+echo "== Snoozed for longer than its gap: an alarm that rings every minute stays quiet until the snooze is up"
+EPOCH=$(date +%s)
+WAIT=$(( 60 - 10#$(date -r "$EPOCH" +%S) ))      # seconds until the next minute
+[ "$WAIT" -lt 40 ] && WAIT=$(( WAIT + 60 ))      # time to look at the list first
+QUIET=$(( EPOCH + WAIT ))                        # a ring due while it's snoozed
+UP=$(( QUIET + 30 ))                             # the snooze is up half a minute later
+SNOOZED=6F1C1D2E-0000-4000-8000-0000000000D1
+cat > "$SUPPORT/alarms.json" <<JSON
+[{"id": "$SNOOZED", "name": "Water break", "isOn": true, "kind": "repeating",
+  "fromMinute": 0, "untilMinute": 0, "every": 1, "everyUnit": "minutes", "timeMinute": 0,
+  "days": [1, 2, 3, 4, 5, 6, 7], "sound": "Glass", "plays": 1, "playUnit": "times", "volume": 0.3,
+  "ringWhenMuted": true, "keepAwake": false}]
+JSON
+defaults write com.shriya.Ding snoozes -dict "$SNOOZED" -float "$UP"
+rm -f /tmp/ding-snoozed.log
+pkill -x Ding 2>/dev/null; sleep 1
+open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-snoozed.log
+sleep 5
+screencapture -x "$OUT/menu-snoozed-every-minute.png"
+pkill -x Ding; sleep 1
+open -n "$APP" --args -DingRingLog /tmp/ding-snoozed.log
+echo "A ring is due in $(( QUIET - $(date +%s) )) s; the alarm is snoozed until $(( UP - $(date +%s) )) s from now..."
+sleep $(( UP - $(date +%s) + 40 ))     # past the snooze, and the usual ring after it
+pkill -x Ding; sleep 1
+defaults delete com.shriya.Ding snoozes 2>/dev/null
+show_log /tmp/ding-snoozed.log
+if python3 - /tmp/ding-snoozed.log "$SNOOZED" "$QUIET" "$UP" <<'PY'
+import sys
+log, alarm, quiet, up = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
+lines = [line.split() for line in open(log)]
+listed = [" ".join(l[1:]) for l in lines if l[1:3] == ["list", "shown"]]
+quiets = [float(l[4]) for l in lines if len(l) > 4 and l[1] == "quiet" and l[2] == alarm]
+rings = [float(l[4]) for l in lines if len(l) > 4 and l[1] == "ring" and l[2] == alarm]
+problems = []
+if not listed or not listed[0].endswith("(snoozed)"):
+    problems.append(f"the list's Next line doesn't show the snooze: {listed}")
+if quiet not in quiets:
+    problems.append(f"no quiet ring at its usual time while snoozed; quiet ones: {[q - up for q in quiets]}")
+if any(r < up - 1 for r in rings):
+    problems.append(f"it rang while snoozed (seconds from the snooze's end): {[r - up for r in rings]}")
+if not any(abs(r - up) <= 1 for r in rings):
+    problems.append(f"it didn't ring when the snooze was up: {[r - up for r in rings]}")
+if quiet + 60 not in rings:
+    problems.append(f"it didn't carry on as usual after the snooze: {[r - up for r in rings]}")
+for problem in problems:
+    print("  -", problem)
+sys.exit(1 if problems else 0)
+PY
+then
+    echo "OK: while snoozed, the alarm that rings every minute stayed quiet; it rang when the snooze was up and"
+    echo "    then carried on as usual, and the list's Next line showed the snooze"
+else
+    echo "FAIL: the snoozed alarm didn't stay quiet until its snooze was up"; TEST_OK=0
+fi
+rm -f "$SUPPORT/alarms.json"
 [ "$TEST_OK" = 1 ] || fail "test run"
 
 echo

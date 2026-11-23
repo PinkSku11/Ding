@@ -296,7 +296,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         cancelPending()
         player?.stop()
         player = nil
-        finishNotification(after: 4)
+        finishNotification(after: 30)   // time to open its Options menu and pick a snooze
         current = nil
         playNext()
     }
