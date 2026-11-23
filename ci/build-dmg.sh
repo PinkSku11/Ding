@@ -138,16 +138,39 @@ shoot new new-alarm dark || TEST_OK=0
 shoot menu-plus new-from-menu dark || TEST_OK=0
 shoot menu menu-light || TEST_OK=0
 shoot options options dark || TEST_OK=0
-echo "-- opening Ding again (as a click on its notification does) shows the alarm list without the options"
-pkill -x Ding 2>/dev/null; sleep 1
-open -n "$APP" --args -DingDark YES
-sleep 4
-open "$APP"            # Ding is running already: this opens it again
-sleep 2
-screencapture -x "$OUT/reopen.png"
-python3 ci/click.py key escape
+echo
+echo "== Opening Ding again while it runs (as a click on its notification does): macOS gets its answer at once,"
+echo "   and the alarm list shows, without the options"
+reopen_check() {   # $1: the app. Opens it, then opens it again and leaves the list it shows open.
+    pkill -x Ding 2>/dev/null; sleep 1
+    open -n "$1" --args -DingDark YES
+    sleep 4
+    python3 - "$1" <<'PY'
+import subprocess, sys, time
+start = time.time()
+try:
+    result = subprocess.run(["open", sys.argv[1]], capture_output=True, text=True, timeout=45)
+    print(f"answered after {time.time() - start:.1f} s (exit {result.returncode}) {result.stderr.strip()}")
+except subprocess.TimeoutExpired:
+    print("no answer after 45 s")
+PY
+}
+rm -rf /tmp/previous /tmp/previous.zip; mkdir -p /tmp/previous
+if git fetch -q --depth 1 origin build 2>/dev/null && git show FETCH_HEAD:Ding.zip > /tmp/previous.zip 2>/dev/null \
+   && ditto -x -k /tmp/previous.zip /tmp/previous 2>/dev/null && [ -d /tmp/previous/Ding.app ]; then
+    echo "The build before this one: $(reopen_check /tmp/previous/Ding.app)"
+    pkill -x Ding; sleep 1
+fi
+REOPEN=$(reopen_check "$APP")
+echo "This build: $REOPEN"
 sleep 1
+screencapture -x "$OUT/reopen.png"
+python3 ci/click.py key escape; sleep 1
 pkill -x Ding; sleep 1
+case "$REOPEN" in
+    "answered after "[0-2].*"(exit 0)"*) echo "OK: opening Ding again is answered at once, and the list still shows" ;;
+    *) echo "FAIL: opening Ding again wasn't answered at once"; TEST_OK=0 ;;
+esac
 
 echo
 echo "== Switch test: film the menu while an alarm is switched off"

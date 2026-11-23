@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private weak var timerSection: TimerSectionView?   // the timer row in the open menu, to count down in
     private var countdownTicker: Timer?
     private var shownCountdown = ""
+    private var reopenListOpen = false   // the list shown when Ding is opened again is on screen
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Only one Ding at a time, or every alarm would ring twice. The copy you just opened wins.
@@ -117,7 +118,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// list next to the pointer, so it's always reachable even if the bell is hidden behind the notch.
     /// The options stay on a right click on the bell.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        buildAlarmMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        // Answer macOS first, then show the list. A list shown right here would keep macOS waiting for as
+        // long as it stayed open, and macOS would then say Ding isn't responding.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.reopenListOpen else { return }
+            self.reopenListOpen = true
+            self.buildAlarmMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+            self.reopenListOpen = false
+        }
         return false
     }
 
