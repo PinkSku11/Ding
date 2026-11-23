@@ -101,6 +101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         let now = Date()
                         Ringer.shared.enqueue([Ring(alarm: alarm, time: now, next: Schedule.nextRing(for: alarm, after: now))])
                     }
+                case "editor-arrows":   // the editor, and where its arrows are, for clicks on them
+                    self?.openEditor(AlarmStore.shared.alarms.first?.id)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self?.editor?.logArrows() }
                 case "editor": self?.openEditor(AlarmStore.shared.alarms.first?.id)
                 case "new": self?.openEditor(nil)
                 default: break
@@ -121,12 +124,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Answer macOS first, then show the list. A list shown right here would keep macOS waiting for as
         // long as it stayed open, and macOS would then say Ding isn't responding.
         DispatchQueue.main.async { [weak self] in
-            guard let self, !self.reopenListOpen else { return }
-            self.reopenListOpen = true
-            self.buildAlarmMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
-            self.reopenListOpen = false
+            self?.popUpList(at: NSEvent.mouseLocation)
         }
         return false
+    }
+
+    /// The alarm list away from the bell, its top left corner at `point`.
+    private func popUpList(at point: NSPoint) {
+        guard !reopenListOpen else { return }
+        reopenListOpen = true
+        RingLog.write("list shown")
+        buildAlarmMenu(fromBell: false).popUp(positioning: nil, at: point, in: nil)
+        reopenListOpen = false
     }
 
     // MARK: Menu bar icon
@@ -193,7 +202,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func openAlarmMenu() {
-        openMenu(buildAlarmMenu())
+        RingLog.write("list shown")
+        openMenu(buildAlarmMenu(fromBell: true))
+    }
+
+    /// Where an alarm list was, to show it there again when you're done in the editor.
+    private enum ListPlace {
+        case bell
+        case at(NSPoint)
+    }
+
+    /// For the list's clicks that open the editor: the list to come back to afterwards.
+    private func listPlace(fromBell: Bool, anchor: NSRect?) -> ListPlace? {
+        if fromBell { return .bell }
+        return anchor.map { .at(NSPoint(x: $0.minX, y: $0.maxY)) }
     }
 
     private func openMenu(_ menu: NSMenu?) {
@@ -227,8 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return menu
     }
 
-    /// Click: the alarm list.
-    private func buildAlarmMenu() -> NSMenu {
+    /// Click: the alarm list. When you're done in the editor opened from it, the list comes back.
+    private func buildAlarmMenu(fromBell: Bool) -> NSMenu {
         let menu = newMenu()
         let alarms = sortedAlarms()
 
@@ -238,7 +260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.view = EmptyStateView { [weak self, weak menu] in
                 let anchor = menu?.items.first?.view?.window?.frame
                 menu?.cancelTracking()
-                DispatchQueue.main.async { self?.openEditor(nil, anchor: anchor) }
+                let back = self?.listPlace(fromBell: fromBell, anchor: anchor)
+                DispatchQueue.main.async { self?.openEditor(nil, anchor: anchor, backTo: back) }
             }
             menu.addItem(item)
         } else {
@@ -251,7 +274,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let addAction = { [weak self, weak menu] in
                 let anchor = menu?.items.first?.view?.window?.frame   // where the list is on screen
                 menu?.cancelTracking()
-                DispatchQueue.main.async { self?.openEditor(nil, anchor: anchor) }
+                let back = self?.listPlace(fromBell: fromBell, anchor: anchor)
+                DispatchQueue.main.async { self?.openEditor(nil, anchor: anchor, backTo: back) }
             }
             lastAddAction = addAction
             alarmsHeader.view = AlarmsHeaderView(onAdd: addAction)
@@ -272,7 +296,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     onOpen: { [weak self, weak menu] in
                         let anchor = menu?.items.first?.view?.window?.frame
                         menu?.cancelTracking()
-                        DispatchQueue.main.async { self?.openEditor(id, anchor: anchor) }
+                        let back = self?.listPlace(fromBell: fromBell, anchor: anchor)
+                        DispatchQueue.main.async { self?.openEditor(id, anchor: anchor, backTo: back) }
                     })
                 menu.addItem(item)
             }
@@ -395,7 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Editor
 
-    private func openEditor(_ id: UUID?, anchor: NSRect? = nil) {
+    private func openEditor(_ id: UUID?, anchor: NSRect? = nil, backTo list: ListPlace? = nil) {
         editor?.close(restoreFocus: false)
         let alarm: Alarm
         let isNew: Bool
@@ -409,9 +434,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             isNew = true
         }
         let controller = EditorController(alarm: alarm, isNew: isNew)
-        controller.onFinish = { [weak self, weak controller] in
-            if let self, self.editor === controller {
+        controller.onFinish = { [weak self, weak controller] done in
+            guard let self else { return }
+            if self.editor === controller {
                 self.editor = nil
+            }
+            // Done (saved, cancelled or deleted): back to the list it was opened from.
+            guard done, let list else { return }
+            RingLog.write("editor done, back to the list")
+            DispatchQueue.main.async {
+                switch list {
+                case .bell: self.openAlarmMenu()
+                case .at(let point): self.popUpList(at: point)
+                }
             }
         }
         editor = controller

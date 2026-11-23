@@ -351,6 +351,94 @@ if alarm["name"] != "Morning stretch" or alarm["kind"] != "once":
 PY
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 
+echo
+echo "== Arrows in the editor: From, Until, Every and Play sound; then typing, Tab and Return"
+arrow() {   # $1: the box, $2: up, down or text; prints the point to click, from where Ding says its arrows are
+    python3 - "$1" "$2" /tmp/ding-arrows.log <<'PY'
+import sys
+name, part, log = sys.argv[1], sys.argv[2], sys.argv[3]
+for line in open(log):
+    words = line.split()
+    if len(words) >= 7 and words[1] == "arrows" and words[2] == name:
+        x, y, w, h = map(float, words[3:7])
+        if part == "text":
+            print(int(x - 20), int(y + h / 2))
+        else:
+            print(int(x + w / 2), int(y + h / 2 + (-5 if part == "up" else 5)))
+        break
+PY
+}
+rm -f /tmp/ding-arrows.log
+pkill -x Ding 2>/dev/null; sleep 1
+open -n "$APP" --args -DingShow editor-arrows -DingDark YES -DingRingLog /tmp/ding-arrows.log
+sleep 5
+grep " arrows " /tmp/ding-arrows.log || echo "(Ding didn't say where its arrows are)"
+screencapture -x "$OUT/arrows-before.png"
+python3 ci/click.py click $(arrow From up); sleep 0.5          # 9:00 becomes 10:00
+python3 ci/click.py click $(arrow Until down); sleep 0.5       # 23:00 becomes 22:00
+python3 ci/click.py click $(arrow Every up); sleep 0.4         # 15 becomes 16
+python3 ci/click.py click $(arrow Every up); sleep 0.4         # and 17
+python3 ci/click.py click $(arrow Play_sound down); sleep 0.5  # 2 becomes 1
+screencapture -x "$OUT/arrows-after.png"
+python3 ci/click.py key return; sleep 1.5                      # Return saves
+pkill -x Ding 2>/dev/null; sleep 1
+python3 - "$SUPPORT/alarms.json" <<'PY' || TEST_OK=0
+import json, sys
+alarm = next(a for a in json.load(open(sys.argv[1])) if a["name"] == "Water break")
+got = (alarm["fromMinute"], alarm["untilMinute"], alarm["every"], alarm["plays"])
+print(f"After the arrows: from {got[0]}, until {got[1]}, every {got[2]}, plays {got[3]}")
+if got != (600, 1320, 17, 1):
+    print("ARROWS TEST PROBLEM: expected from 600 (10:00), until 1320 (22:00), every 17 and plays 1")
+    sys.exit(1)
+print("OK: the arrows moved the hours and the numbers by one")
+PY
+rm -f /tmp/ding-arrows.log
+open -n "$APP" --args -DingShow editor-arrows -DingDark YES -DingRingLog /tmp/ding-arrows.log
+sleep 5
+python3 ci/click.py tripleclick $(arrow Every text); sleep 0.3   # select what's in Every
+python3 ci/click.py type "2x0"; sleep 0.3                       # the x doesn't go in
+python3 ci/click.py key tab; sleep 0.3                          # on to Play sound
+python3 ci/click.py type "5"; sleep 0.3
+python3 ci/click.py key up; sleep 0.3                           # the up arrow key counts up: 6
+screencapture -x "$OUT/arrows-typed.png"
+python3 ci/click.py key return; sleep 1.5
+pkill -x Ding 2>/dev/null; sleep 1
+python3 - "$SUPPORT/alarms.json" <<'PY' || TEST_OK=0
+import json, sys
+alarm = next(a for a in json.load(open(sys.argv[1])) if a["name"] == "Water break")
+print(f"After typing: every {alarm['every']}, plays {alarm['plays']}")
+if (alarm["every"], alarm["plays"]) != (20, 6):
+    print("ARROWS TEST PROBLEM: expected every 20 (typed) and plays 6 (Tab, 5, then the up arrow key)")
+    sys.exit(1)
+print("OK: typing, Tab to the next box and the up arrow key work")
+PY
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+
+echo
+echo "== Done in the editor opened from the list: the list comes back"
+rm -f /tmp/ding-back.log
+pkill -x Ding 2>/dev/null; sleep 1
+open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-back.log
+sleep 5
+python3 ci/click.py click 760 193; sleep 2     # the first alarm: its editor opens
+python3 ci/click.py key escape; sleep 2        # Escape closes the editor, and the list comes back
+screencapture -x "$OUT/back-after-escape.png"
+python3 ci/click.py click 760 193; sleep 2     # the first alarm again
+python3 ci/click.py key return; sleep 2        # Save, and the list comes back
+screencapture -x "$OUT/back-after-save.png"
+python3 ci/click.py key escape; sleep 1        # the list closes
+pkill -x Ding 2>/dev/null; sleep 1
+show_log /tmp/ding-back.log
+SHOWN=$(grep -c " list shown" /tmp/ding-back.log 2>/dev/null)
+BACK=$(grep -c " editor done, back to the list" /tmp/ding-back.log 2>/dev/null)
+if [ "$SHOWN" = 3 ] && [ "$BACK" = 2 ]; then
+    echo "OK: after Escape and after Save, the list came back"
+else
+    echo "BACK TO THE LIST PROBLEM: the list was shown $SHOWN times (expected 3), back after the editor $BACK times (expected 2)"
+    TEST_OK=0
+fi
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+
 rm -f "$SUPPORT/alarms.json"
 shoot menu empty dark || TEST_OK=0
 [ "$TEST_OK" = 1 ] || fail "test run"

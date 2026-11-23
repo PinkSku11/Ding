@@ -85,11 +85,15 @@ struct EditorView: View {
                     }
 
                     if model.kind == .repeating {
-                        DatePicker("From", selection: minuteBinding(\.fromMinute), displayedComponents: .hourAndMinute)
-                        DatePicker("Until", selection: minuteBinding(\.untilMinute), displayedComponents: .hourAndMinute)
+                        LabeledContent("From") {
+                            TimeBox(label: "From", date: minuteBinding(\.fromMinute))
+                        }
+                        LabeledContent("Until") {
+                            TimeBox(label: "Until", date: minuteBinding(\.untilMinute))
+                        }
                         LabeledContent("Every") {
                             HStack(spacing: 6) {
-                                NumberField(value: $model.alarm.every)
+                                NumberBox(label: "Every", value: $model.alarm.every, minimum: 1)
                                 Picker("Every", selection: $model.alarm.everyUnit) {
                                     Text(verbatim: model.alarm.every == 1 ? "minute" : "minutes").tag(IntervalUnit.minutes)
                                     Text(verbatim: model.alarm.every == 1 ? "hour" : "hours").tag(IntervalUnit.hours)
@@ -100,7 +104,9 @@ struct EditorView: View {
                             }
                         }
                     } else if model.kind == .once {
-                        DatePicker("Time", selection: minuteBinding(\.timeMinute), displayedComponents: .hourAndMinute)
+                        LabeledContent("Time") {
+                            TimeBox(label: "Time", date: minuteBinding(\.timeMinute))
+                        }
                     }
 
                     LabeledContent("Days") {
@@ -143,7 +149,7 @@ struct EditorView: View {
 
                     LabeledContent("Play sound") {
                         HStack(spacing: 6) {
-                            NumberField(value: $model.alarm.plays)
+                            NumberBox(label: "Play sound", value: $model.alarm.plays)
                             Picker("Play sound", selection: $model.alarm.playUnit) {
                                 Text(verbatim: model.alarm.plays == 1 ? "time" : "times").tag(PlayUnit.times)
                                 Text(verbatim: model.alarm.plays == 1 ? "second" : "seconds").tag(PlayUnit.seconds)
@@ -298,29 +304,6 @@ struct EditorView: View {
     }
 }
 
-// MARK: - A small number box that updates the alarm as you type
-
-struct NumberField: View {
-    @Binding var value: Int
-    @State private var text = ""
-
-    var body: some View {
-        TextField("", text: $text, prompt: Text("0"))
-            .labelsHidden()
-            .textFieldStyle(.roundedBorder)
-            .multilineTextAlignment(.trailing)
-            .frame(width: 54)
-            .onAppear { text = value == 0 ? "" : String(value) }
-            .onChange(of: text) { _, newText in
-                let digits = String(newText.filter { $0.isASCII && $0.isNumber }.prefix(4))
-                let number = Int(digits) ?? 0
-                let tidy = number == 0 ? (digits.isEmpty ? "" : "0") : String(number)
-                if tidy != newText { text = tidy }
-                value = number
-            }
-    }
-}
-
 // MARK: - Rings "Repeatedly" / "Once", each in its own bubble like the days
 
 struct KindPicker: View {
@@ -420,7 +403,8 @@ final class EditorPanel: NSPanel {
 }
 
 final class EditorController: NSObject {
-    var onFinish: (() -> Void)?
+    /// Called once it has closed: true when through its own buttons (Save, Cancel, Delete) or Escape.
+    var onFinish: ((_ done: Bool) -> Void)?
     private var opened = false
     /// Open and actually on screen.
     var isOpen: Bool { opened && panel.isVisible }
@@ -438,12 +422,12 @@ final class EditorController: NSObject {
         super.init()
         let view = EditorView(model: model,
                               onSave: { [weak self] in self?.save() },
-                              onCancel: { [weak self] in self?.close() },
+                              onCancel: { [weak self] in self?.close(done: true) },
                               onDelete: { [weak self] in self?.delete() })
         let hosting = NSHostingView(rootView: view)
         self.hosting = hosting
         panel.contentView = EditorController.background(around: hosting)
-        panel.onEscape = { [weak self] in self?.close() }
+        panel.onEscape = { [weak self] in self?.close(done: true) }
         // Switching between Repeatedly and Once changes the height; keep the top in place.
         kindWatcher = model.$kind.dropFirst().sink { [weak self] _ in
             DispatchQueue.main.async { self?.fit() }
@@ -564,7 +548,7 @@ final class EditorController: NSObject {
         close()
     }
 
-    func close(restoreFocus: Bool = true) {
+    func close(restoreFocus: Bool = true, done: Bool = false) {
         guard opened else { return }
         opened = false
         stopWatching()
@@ -574,7 +558,7 @@ final class EditorController: NSObject {
         if restoreFocus && NSApp.isActive, let app = previousApp, !app.isTerminated {
             app.activate(options: [])
         }
-        onFinish?()
+        onFinish?(done)
     }
 
     private func save() {
@@ -589,12 +573,12 @@ final class EditorController: NSObject {
         }
         alarm.isOn = true   // saving an alarm sets it, like the Clock app
         AlarmStore.shared.save(alarm)
-        close()
+        close(done: true)
     }
 
     private func delete() {
         AlarmStore.shared.delete(model.alarm.id)
-        close()
+        close(done: true)
     }
 
     /// The Duplicate button's action, for the build machine's test.
@@ -605,5 +589,12 @@ final class EditorController: NSObject {
     /// Shows a note next to the sound, for the build machine's layout check.
     func showNote(_ text: String) {
         model.showNote(text)
+    }
+
+    /// Where the arrows of the time and number boxes are, for the build machine's clicks.
+    func logArrows() {
+        if let content = panel.contentView {
+            StepArrows.logPositions(in: content)
+        }
     }
 }
