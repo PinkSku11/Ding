@@ -213,35 +213,39 @@ final class PlusButton: NSView {
     }
 }
 
-// MARK: - Timer: one click on a length, other lengths with − and +, or the timer that's running
+// MARK: - Timer: one click on a length, Custom to type the minutes, or the timer that's running
 
 final class TimerSectionView: NSView {
     static let idleHeight: CGFloat = 72
+    static let customHeight: CGFloat = 108     // with the Custom row open under the lengths
     static let runningHeight: CGFloat = 90
 
     private let timer: DingTimer?
     private let onStart: (TimeInterval) -> Void
     private let onStop: () -> Void
+    private let onTyping: () -> Void                           // the Custom box is about to take the keyboard
+    private let title = NSTextField(labelWithString: "Timer")
     private let divider = NSView()
     private let bubble = NSView()
-    private let presets = NSView()                             // 5 / 10 / 15 / 30 min and …
-    private let other = NSView()                               // − 20 min +  Start
-    private let otherLabel = NSTextField(labelWithString: "")
+    private let presets = NSView()                             // 5 / 10 / 15 / 30 min and Custom
+    private let custom = NSView()                              // [ 20 ] min                 Start
+    private let box = MinutesBox()
+    private var customPill: PillButton?
+    private var start: AccentButton?
     private let leftLabel = NSTextField(labelWithString: "")   // "9:42 left"
-    private var otherIndex: Int
+    private var customOpen = false
 
-    init(timer: DingTimer?, onStart: @escaping (TimeInterval) -> Void, onStop: @escaping () -> Void) {
+    init(timer: DingTimer?, onStart: @escaping (TimeInterval) -> Void, onStop: @escaping () -> Void,
+         onTyping: @escaping () -> Void) {
         self.timer = timer
         self.onStart = onStart
         self.onStop = onStop
-        let lastOther = UserDefaults.standard.integer(forKey: "timerOtherMinutes")
-        otherIndex = DingTimer.lengths.firstIndex(of: lastOther) ?? DingTimer.lengths.firstIndex(of: 20) ?? 0
+        self.onTyping = onTyping
         let width = MenuMetrics.width
         let height = timer == nil ? TimerSectionView.idleHeight : TimerSectionView.runningHeight
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
         autoresizingMask = [.width]
 
-        let title = NSTextField(labelWithString: "Timer")
         title.font = .systemFont(ofSize: 11, weight: .semibold)
         title.textColor = .tertiaryLabelColor
         title.frame = NSRect(x: MenuMetrics.labelX, y: height - 20, width: 200, height: 14)
@@ -257,7 +261,7 @@ final class TimerSectionView: NSView {
             addRunning(timer)
         } else {
             addPresets()
-            addOther()
+            addCustom()
         }
         updateColors()
     }
@@ -278,8 +282,8 @@ final class TimerSectionView: NSView {
         addSubview(presets)
         let inset = MenuMetrics.cardInset
         let gap: CGFloat = 6
-        let moreWidth: CGFloat = 40
-        let pillWidth = ((MenuMetrics.width - inset * 2 - moreWidth - gap * 4) / 4).rounded(.down)
+        let customWidth: CGFloat = 64
+        let pillWidth = ((MenuMetrics.width - inset * 2 - customWidth - gap * 4) / 4).rounded(.down)
         var x = inset
         for minutes in [5, 10, 15, 30] {
             let pill = PillButton(title: "\(minutes) min", width: pillWidth) { [weak self] in
@@ -290,35 +294,40 @@ final class TimerSectionView: NSView {
             presets.addSubview(pill)
             x += pillWidth + gap
         }
-        let more = PillButton(title: "…", width: moreWidth) { [weak self] in self?.showOther() }
-        more.setAccessibilityLabel("Another length")
-        more.setFrameOrigin(NSPoint(x: x, y: 4))
-        presets.addSubview(more)
+        let pill = PillButton(title: "Custom", width: customWidth) { [weak self] in self?.toggleCustom() }
+        pill.setAccessibilityLabel("Custom length")
+        pill.setFrameOrigin(NSPoint(x: x, y: 4))
+        presets.addSubview(pill)
+        customPill = pill
     }
 
-    private func addOther() {
-        other.frame = presets.frame
-        other.autoresizingMask = [.width]
-        other.isHidden = true
-        addSubview(other)
+    private func addCustom() {
+        custom.frame = NSRect(x: 0, y: 12, width: MenuMetrics.width, height: 36)
+        custom.autoresizingMask = [.width]
+        custom.isHidden = true
+        addSubview(custom)
         let inset = MenuMetrics.cardInset
-        let minus = PillButton(symbol: "minus", width: 32) { [weak self] in self?.step(-1) }
-        minus.setAccessibilityLabel("Shorter")
-        minus.setFrameOrigin(NSPoint(x: inset, y: 4))
-        other.addSubview(minus)
-        otherLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
-        otherLabel.alignment = .center
-        otherLabel.frame = NSRect(x: inset + 36, y: 9, width: 92, height: 17)
-        other.addSubview(otherLabel)
-        let plus = PillButton(symbol: "plus", width: 32) { [weak self] in self?.step(1) }
-        plus.setAccessibilityLabel("Longer")
-        plus.setFrameOrigin(NSPoint(x: inset + 132, y: 4))
-        other.addSubview(plus)
-        let start = AccentButton(title: "Start") { [weak self] in self?.startOther() }
+        box.setFrameOrigin(NSPoint(x: inset, y: 4))
+        custom.addSubview(box)
+
+        let unit = NSTextField(labelWithString: "min")
+        unit.font = .systemFont(ofSize: 13)
+        unit.textColor = .secondaryLabelColor
+        unit.sizeToFit()
+        unit.setFrameOrigin(NSPoint(x: box.frame.maxX + 6, y: 4 + ((28 - unit.frame.height) / 2).rounded()))
+        custom.addSubview(unit)
+
+        let start = AccentButton(title: "Start") { [weak self] in self?.startCustom() }
+        start.setAccessibilityLabel("Start the timer")
         start.setFrameOrigin(NSPoint(x: MenuMetrics.width - inset - start.frame.width, y: 4))
         start.autoresizingMask = [.minXMargin]
-        other.addSubview(start)
-        showLength()
+        custom.addSubview(start)
+        self.start = start
+
+        box.onChange = { [weak self] minutes in self?.start?.isEnabled = minutes != nil }
+        box.onReturn = { [weak self] in self?.startCustom() }
+        let last = UserDefaults.standard.integer(forKey: "timerOtherMinutes")   // the length you typed last time
+        box.text = String(DingTimer.minutes(String(last)) ?? 20)
     }
 
     private func addRunning(_ timer: DingTimer) {
@@ -358,24 +367,34 @@ final class TimerSectionView: NSView {
         refresh()
     }
 
-    private func showOther() {
-        presets.isHidden = true
-        other.isHidden = false
-        RingLog.write("timer other")
+    /// Custom opens a row under the lengths with the minutes box, ready to type in; a second click closes it.
+    private func toggleCustom() {
+        customOpen.toggle()
+        customPill?.isSelected = customOpen
+        let height = customOpen ? TimerSectionView.customHeight : TimerSectionView.idleHeight
+        setFrameSize(NSSize(width: frame.width, height: height))
+        title.setFrameOrigin(NSPoint(x: MenuMetrics.labelX, y: height - 20))
+        presets.setFrameOrigin(NSPoint(x: 0, y: height - 60))
+        custom.isHidden = !customOpen
+        if let item = enclosingMenuItem {
+            item.menu?.itemChanged(item)   // the list grows (or shrinks) to fit the row
+        }
+        if customOpen {
+            RingLog.write("timer custom")
+            onTyping()
+            box.focus()
+        } else {
+            window?.makeFirstResponder(nil)
+            RingLog.write("timer custom closed")
+        }
     }
 
-    private func step(_ by: Int) {
-        otherIndex = min(max(otherIndex + by, 0), DingTimer.lengths.count - 1)
-        showLength()
-    }
-
-    private func showLength() {
-        otherLabel.stringValue = Format.length(TimeInterval(DingTimer.lengths[otherIndex] * 60))
-    }
-
-    private func startOther() {
-        let minutes = DingTimer.lengths[otherIndex]
-        UserDefaults.standard.set(minutes, forKey: "timerOtherMinutes")   // where − and + start next time
+    private func startCustom() {
+        guard let minutes = DingTimer.minutes(box.text) else {
+            NSSound.beep()
+            return
+        }
+        UserDefaults.standard.set(minutes, forKey: "timerOtherMinutes")   // what the box shows next time
         onStart(TimeInterval(minutes * 60))
     }
 
@@ -392,7 +411,98 @@ final class TimerSectionView: NSView {
     }
 }
 
-/// A small rounded button in the timer row: a word ("10 min", "Stop") or a symbol (− and +).
+/// The box in the Custom row: the minutes to time, as digits only, three at most.
+final class MinutesBox: NSView, NSTextFieldDelegate {
+    var onChange: ((Int?) -> Void)?
+    var onReturn: (() -> Void)?
+    private let field = NSTextField(string: "")
+
+    var text: String {
+        get { field.stringValue }
+        set {
+            field.stringValue = DingTimer.digits(newValue)
+            onChange?(DingTimer.minutes(field.stringValue))
+        }
+    }
+
+    init() {
+        let height: CGFloat = 28
+        super.init(frame: NSRect(x: 0, y: 0, width: 52, height: height))
+        wantsLayer = true
+        layer?.cornerRadius = height / 2
+        layer?.borderWidth = 1.5
+
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.alignment = .center
+        field.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        field.textColor = .labelColor
+        field.usesSingleLineMode = true
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.delegate = self
+        field.setAccessibilityLabel("Minutes")
+        let fieldHeight = ceil(field.intrinsicContentSize.height)
+        field.frame = NSRect(x: 6, y: ((height - fieldHeight) / 2).rounded(), width: bounds.width - 12, height: fieldHeight)
+        addSubview(field)
+        updateColors()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    /// Puts the cursor in the box with what's there selected, so typing replaces it.
+    func focus() {
+        window?.makeFirstResponder(field)
+        field.currentEditor()?.selectAll(nil)
+        logKeyboard("now")
+        // Once more after Ding has had a moment to become the active app. A run-loop timer, because the list is open.
+        let later = Timer(timeInterval: 0.6, repeats: false) { [weak self] _ in self?.logKeyboard("later") }
+        RunLoop.main.add(later, forMode: .common)
+    }
+
+    private func logKeyboard(_ when: String) {
+        let responder = window?.firstResponder.map { String(describing: type(of: $0)) } ?? "none"
+        RingLog.write("keyboard \(when): active \(NSApp.isActive), key window \(window?.isKeyWindow ?? false), typing goes to \(responder)")
+    }
+
+    override func mouseDown(with event: NSEvent) {   // a click on the box around the digits
+        focus()
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        let digits = DingTimer.digits(field.stringValue)
+        if digits != field.stringValue {
+            field.stringValue = digits   // letters, and a fourth digit, don't go in
+        }
+        RingLog.write("timer typed \(digits)")
+        onChange?(DingTimer.minutes(digits))
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            onReturn?()   // Return starts the timer
+            return true
+        }
+        return false
+    }
+
+    private func updateColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.09).cgColor
+            self.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColors()
+    }
+}
+
+/// A small rounded button in the timer row: "10 min", "Custom", "Stop".
 final class PillButton: NSView {
     private let action: () -> Void
     private var trackingArea: NSTrackingArea?
@@ -402,31 +512,26 @@ final class PillButton: NSView {
     private var pressed = false {
         didSet { updateColor() }
     }
+    /// Shown darker, like a pressed button: Custom while its row is open.
+    var isSelected = false {
+        didSet { updateColor() }
+    }
 
-    init(title: String? = nil, symbol: String? = nil, width: CGFloat, action: @escaping () -> Void) {
+    init(title: String, width: CGFloat, action: @escaping () -> Void) {
         self.action = action
         let height: CGFloat = 28
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
         wantsLayer = true
         layer?.cornerRadius = height / 2
 
-        if let title {
-            let label = NSTextField(labelWithString: title)
-            label.font = .systemFont(ofSize: 12)
-            label.alignment = .center
-            label.sizeToFit()
-            label.frame = NSRect(x: 0, y: ((height - label.frame.height) / 2).rounded(),
-                                 width: width, height: label.frame.height)
-            addSubview(label)
-            setAccessibilityLabel(title)
-        } else if let symbol {
-            let icon = NSImageView(frame: bounds)
-            icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
-            icon.contentTintColor = .labelColor
-            icon.imageScaling = .scaleNone
-            addSubview(icon)
-        }
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 12)
+        label.alignment = .center
+        label.sizeToFit()
+        label.frame = NSRect(x: 0, y: ((height - label.frame.height) / 2).rounded(),
+                             width: width, height: label.frame.height)
+        addSubview(label)
+        setAccessibilityLabel(title)
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         updateColor()
@@ -437,7 +542,7 @@ final class PillButton: NSView {
     }
 
     private func updateColor() {
-        let alpha: CGFloat = pressed ? 0.26 : (hovering ? 0.18 : 0.09)
+        let alpha: CGFloat = pressed || isSelected ? 0.26 : (hovering ? 0.18 : 0.09)
         effectiveAppearance.performAsCurrentDrawingAppearance {
             self.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(alpha).cgColor
         }
@@ -783,13 +888,20 @@ final class MenuSwitch: NSView {
     }
 }
 
-// MARK: - Blue pill button for the empty menu
+// MARK: - Blue pill button: New alarm in the empty menu, Start in the timer's Custom row
 
 final class AccentButton: NSView {
     private let label = NSTextField(labelWithString: "")
     private let action: () -> Void
     private var pressed = false {
         didSet { updateColor() }
+    }
+    /// Faded and doesn't respond: Start while the minutes box is empty or 0.
+    var isEnabled = true {
+        didSet {
+            alphaValue = isEnabled ? 1 : 0.45
+            setAccessibilityEnabled(isEnabled)
+        }
     }
 
     init(title: String, action: @escaping () -> Void) {
@@ -834,18 +946,19 @@ final class AccentButton: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        pressed = true
+        pressed = isEnabled
     }
 
     override func mouseUp(with event: NSEvent) {
         pressed = false
         let point = convert(event.locationInWindow, from: nil)
-        if bounds.contains(point) {
+        if isEnabled && bounds.contains(point) {
             action()
         }
     }
 
     override func accessibilityPerformPress() -> Bool {
+        guard isEnabled else { return false }
         action()
         return true
     }

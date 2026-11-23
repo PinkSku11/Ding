@@ -368,10 +368,14 @@ do {
     check(Format.length(60 * 60) == "1 h", "an hour: \(Format.length(60 * 60))")
     check(Format.length(90 * 60) == "1 h 30 min", "an hour and a half: \(Format.length(90 * 60))")
     check(Format.length(20) == "20 s", "the build machine's short one: \(Format.length(20))")
-    let lengths = DingTimer.lengths
-    check(zip(lengths, lengths.dropFirst()).allSatisfy { $0 < $1 } && lengths.first == 1 && lengths.last == 720,
-          "− and + go from 1 minute to 12 hours, in order")
-    check([5, 10, 15, 20, 30, 45, 60, 90].allSatisfy { lengths.contains($0) }, "− and + reach the usual lengths")
+    check(DingTimer.digits("37") == "37" && DingTimer.digits("1x2") == "12" && DingTimer.digits("1234") == "123"
+          && DingTimer.digits(" 4 5") == "45" && DingTimer.digits("٣") == "" && DingTimer.digits("") == "",
+          "the Custom box keeps digits only, three at most: \(DingTimer.digits("1x2")), \(DingTimer.digits("1234"))")
+    check(DingTimer.minutes("37") == 37 && DingTimer.minutes("999") == 999 && DingTimer.minutes("007") == 7
+          && DingTimer.minutes("1") == 1, "typed minutes: \(String(describing: DingTimer.minutes("37")))")
+    check(DingTimer.minutes("") == nil && DingTimer.minutes("0") == nil && DingTimer.minutes("000") == nil
+          && DingTimer.minutes("1000") == nil && DingTimer.minutes("1x") == nil,
+          "empty, 0 and anything but up to three digits isn't a length")
     let rings = DingTimer(end: Date(), length: 15 * 60).alarm
     check(rings.id == DingTimer.alarmID && rings.displayName == "15 min timer" && rings.sound == "Glass"
           && rings.plays == 30 && rings.playUnit == .seconds && rings.volume == 0.8 && !rings.ringWhenMuted,

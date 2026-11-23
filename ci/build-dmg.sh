@@ -189,13 +189,15 @@ sleep 1
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 
 echo
-echo "== Timer: 5 min, the countdown next to the bell, the running timer in the menu, Stop, another length"
+echo "== Timer: 5 min, the countdown next to the bell, the running timer in the menu, Stop, Custom"
+front_app() { osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null; }
+show_log() { awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' "$1" 2>/dev/null || echo "(no log)"; }
 clear_timer
 rm -f /tmp/ding-timer.log
 open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log
 sleep 5
 screencapture -x "$OUT/timer-menu.png"
-python3 ci/click.py click 715 112          # "5 min"
+python3 ci/click.py click 712 112          # "5 min"
 sleep 1.5
 screencapture -x "$OUT/timer-menubar.png"  # the menu has closed; the time left is next to the bell
 pkill -x Ding; sleep 1
@@ -206,29 +208,83 @@ python3 ci/click.py click 961 121          # Stop
 sleep 1.5
 screencapture -x "$OUT/timer-stopped.png"
 pkill -x Ding; sleep 1
-open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log
-sleep 5
-python3 ci/click.py click 983 112          # "…"
-sleep 0.6
-python3 ci/click.py click 831 112; sleep 0.4   # + (20 min becomes 25)
-python3 ci/click.py click 831 112; sleep 0.4   # + (30)
-screencapture -x "$OUT/timer-other.png"
-python3 ci/click.py click 970 112          # Start
-sleep 1.5
+
+echo "-- Custom: with another app in front, as when you click the bell"
+open -n "$APP" --args -DingDark YES -DingRingLog /tmp/ding-timer.log
+sleep 4
+open -a Finder; sleep 2
+echo "Front app before: $(front_app)"
+python3 ci/click.py click 795 12; sleep 1.2      # the bell
+python3 ci/click.py click 971 112; sleep 1       # Custom: a row with the minutes box opens under the lengths
+screencapture -x "$OUT/timer-custom.png"
+python3 ci/click.py type "37"; sleep 0.6
+screencapture -x "$OUT/timer-custom-typed.png"
+python3 ci/click.py key return; sleep 1.5        # Return starts it
+CUSTOM_FRONT=$(front_app)
+echo "Front app after Return: $CUSTOM_FRONT"
+python3 ci/click.py click 795 12; sleep 1.2
+python3 ci/click.py click 961 121; sleep 1.2     # Stop
+python3 ci/click.py click 795 12; sleep 1.2
+python3 ci/click.py click 971 112; sleep 1       # Custom: 37 is there, selected
+python3 ci/click.py type "1x2"; sleep 0.6        # the x doesn't go in
+screencapture -x "$OUT/timer-custom-typed-again.png"
+python3 ci/click.py click 965 148; sleep 1.5     # Start
+python3 ci/click.py click 795 12; sleep 1.2
+python3 ci/click.py click 961 121; sleep 1.2     # Stop
+python3 ci/click.py click 795 12; sleep 1.2
+python3 ci/click.py click 971 112; sleep 0.8     # Custom opens the row
+python3 ci/click.py click 971 112; sleep 0.8     # and a second click closes it
+screencapture -x "$OUT/timer-custom-closed.png"
+python3 ci/click.py click 712 112; sleep 1.5     # 5 min
+python3 ci/click.py click 795 12; sleep 1.2
+python3 ci/click.py click 961 121; sleep 1.2     # Stop
 pkill -x Ding; sleep 1
 clear_timer
-awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-timer.log 2>/dev/null || echo "(no log)"
-python3 - /tmp/ding-timer.log <<'PY' || TEST_OK=0
+show_log /tmp/ding-timer.log
+python3 - /tmp/ding-timer.log "$CUSTOM_FRONT" <<'PY2' || TEST_OK=0
 import sys
-steps = [line.split(" ", 1)[1].split(" ends ")[0].strip() for line in open(sys.argv[1])
-         if line.split(" ", 1)[1].startswith("timer ")]
-want = ["timer started 300", "timer stopped", "timer other", "timer started 1800"]
-if steps == want:
-    print("OK: 5 min started a 5-minute timer, Stop stopped it, and … with + twice started a 30-minute one")
-else:
-    print(f"FAIL: expected {want}, got {steps}")
-    sys.exit(1)
-PY
+lines = [line.split(" ", 1)[1].strip() for line in open(sys.argv[1]) if " " in line]
+steps = [l.split(" ends ")[0] for l in lines
+         if l.startswith(("timer started", "timer stopped", "timer custom"))]
+want = ["timer started 300", "timer stopped",
+        "timer custom", "timer started 2220", "timer stopped",
+        "timer custom", "timer started 720", "timer stopped",
+        "timer custom", "timer custom closed", "timer started 300", "timer stopped"]
+typed = [l for l in lines if l.startswith("timer typed ")]
+problems = []
+if steps != want:
+    problems.append(f"expected {want}, got {steps}")
+if any("x" in l for l in typed):
+    problems.append(f"a letter went into the box: {typed}")
+if sys.argv[2] != "Finder":
+    problems.append(f"the keyboard didn't go back to Finder, the app in front is {sys.argv[2]!r}")
+if problems:
+    print("FAIL: " + "; ".join(problems)); sys.exit(1)
+print("OK: 5 min and Stop work; Custom with 37 and Return started 37 minutes, 1x2 and Start started 12,")
+print("    a second click on Custom closed the row, and the keyboard went back to Finder")
+PY2
+
+echo "-- Experiment: the same typing without making Ding the active app"
+rm -f /tmp/ding-noactivate.log
+open -n "$APP" --args -DingDark YES -DingRingLog /tmp/ding-noactivate.log -DingTestNoActivate YES
+sleep 4
+open -a Finder; sleep 2
+python3 ci/click.py click 795 12; sleep 1.2
+python3 ci/click.py click 971 112; sleep 1
+python3 ci/click.py type "45"; sleep 0.6
+screencapture -x "$OUT/timer-noactivate-typed.png"
+python3 ci/click.py key return; sleep 1.5
+echo "Front app after: $(front_app)"
+pkill -x Ding; sleep 1
+clear_timer
+show_log /tmp/ding-noactivate.log
+if grep -q "timer started 2700" /tmp/ding-noactivate.log; then
+    echo "EXPERIMENT: typing and Return reach the box without Ding becoming active"
+elif grep -q "timer typed 45" /tmp/ding-noactivate.log; then
+    echo "EXPERIMENT: typing reaches the box without Ding becoming active, but Return doesn't start it"
+else
+    echo "EXPERIMENT: without Ding becoming active, typing doesn't reach the box"
+fi
 
 echo "-- a 20-second timer rings like an alarm, and a click on the blue bell stops it"
 rm -f /tmp/ding-timer-ring.log
@@ -241,7 +297,7 @@ python3 ci/click.py click 795 12           # the blue bell
 sleep 1.5
 pkill -x Ding; sleep 1
 clear_timer
-awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-timer-ring.log 2>/dev/null || echo "(no log)"
+show_log /tmp/ding-timer-ring.log
 python3 - /tmp/ding-timer-ring.log <<'PY' || TEST_OK=0
 import sys
 TIMER = "7D1A3E52-0000-4000-8000-00000000D1E7"
