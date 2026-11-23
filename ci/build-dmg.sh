@@ -424,6 +424,7 @@ python3 ci/click.py click 760 193; sleep 2     # the first alarm: its editor ope
 python3 ci/click.py key escape; sleep 2        # Escape closes the editor, and the list comes back
 screencapture -x "$OUT/back-after-escape.png"
 python3 ci/click.py click 760 193; sleep 2     # the first alarm again
+screencapture -x "$OUT/back-editor-again.png"
 python3 ci/click.py key return; sleep 2        # Save, and the list comes back
 screencapture -x "$OUT/back-after-save.png"
 python3 ci/click.py key escape; sleep 1        # the list closes

@@ -129,12 +129,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return false
     }
 
-    /// The alarm list away from the bell, its top left corner at `point`.
-    private func popUpList(at point: NSPoint) {
+    /// The alarm list with its top left corner at `point`: next to the pointer when Ding is opened again, or
+    /// where it was before the editor. `fromBell`: it was the bell's list, so the bell shows as pressed again.
+    private func popUpList(at point: NSPoint, fromBell: Bool = false) {
         guard !reopenListOpen else { return }
         reopenListOpen = true
         RingLog.write("list shown")
-        buildAlarmMenu(fromBell: false).popUp(positioning: nil, at: point, in: nil)
+        if fromBell { statusItem.button?.highlight(true) }
+        buildAlarmMenu(fromBell: fromBell).popUp(positioning: nil, at: point, in: nil)
+        if fromBell { statusItem.button?.highlight(false) }
         reopenListOpen = false
     }
 
@@ -207,15 +210,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Where an alarm list was, to show it there again when you're done in the editor.
-    private enum ListPlace {
-        case bell
-        case at(NSPoint)
+    private struct ListPlace {
+        let topLeft: NSPoint
+        let fromBell: Bool
     }
 
     /// For the list's clicks that open the editor: the list to come back to afterwards.
     private func listPlace(fromBell: Bool, anchor: NSRect?) -> ListPlace? {
-        if fromBell { return .bell }
-        return anchor.map { .at(NSPoint(x: $0.minX, y: $0.maxY)) }
+        anchor.map { ListPlace(topLeft: NSPoint(x: $0.minX, y: $0.maxY), fromBell: fromBell) }
     }
 
     private func openMenu(_ menu: NSMenu?) {
@@ -439,14 +441,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if self.editor === controller {
                 self.editor = nil
             }
-            // Done (saved, cancelled or deleted): back to the list it was opened from.
+            // Done (saved, cancelled or deleted): back to the list it was opened from, in the same place.
+            // A moment later, so the key or click that closed the editor is over before the list opens.
             guard done, let list else { return }
             RingLog.write("editor done, back to the list")
-            DispatchQueue.main.async {
-                switch list {
-                case .bell: self.openAlarmMenu()
-                case .at(let point): self.popUpList(at: point)
-                }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self.popUpList(at: list.topLeft, fromBell: list.fromBell)
             }
         }
         editor = controller
