@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - Up and down arrows inside the editor's time and number boxes
 
 /// The up and down arrows on the right of a box: like the Mac's own, without the line it draws between them.
-/// A click steps once; holding the mouse button down keeps stepping.
+/// A click steps once; holding the mouse button down keeps stepping. The pointer stays an arrow over them.
 final class StepArrows: NSView {
     static let width: CGFloat = 13
     static let rightMargin: CGFloat = 4   // from the box's right edge
@@ -12,6 +12,7 @@ final class StepArrows: NSView {
     var name = ""                    // the box's label, for the build machine's log
     private var held: Bool?          // the arrow being held down: true for up
     private var repeater: Timer?
+    private var cursorArea: NSTrackingArea?
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: StepArrows.width, height: 22))
@@ -40,6 +41,24 @@ final class StepArrows: NSView {
             path.lineJoinStyle = .round
             path.stroke()
         }
+    }
+
+    // The box around the arrows shows the text cursor; over the arrows it's the normal pointer.
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .arrow)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let old = cursorArea { removeTrackingArea(old) }
+        let area = NSTrackingArea(rect: bounds, options: [.cursorUpdate, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        cursorArea = area
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.arrow.set()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -103,32 +122,34 @@ final class StepArrows: NSView {
     }
 }
 
-// MARK: - The time boxes: From, Until and Time
+// MARK: - A box with arrows: what the time and number boxes are made of
 
-/// The Mac's own time box, with Ding's arrows. As with the Mac's arrows, they change the hour or the minute you
-/// clicked, or the hour if you haven't clicked either.
-final class TimeBoxControl: NSDatePicker {
-    var onChange: ((Date) -> Void)?
+/// A text box with StepArrows on its right. The text stays clear of the arrows, and the text cursor shows only over
+/// the text.
+class ArrowBox: NSTextField {
     let arrows = StepArrows()
 
-    init() {
-        super.init(frame: .zero)
-        datePickerStyle = .textField   // the time without the Mac's arrows
-        datePickerElements = .hourMinute
-        target = self
-        action = #selector(changed)
-        arrows.onStep = { [weak self] up in self?.step(up) }
+    override class var cellClass: AnyClass? {
+        get { RoomForArrowsCell.self }
+        set {}
+    }
+
+    init(width: CGFloat) {
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 22))
+        isEditable = true
+        isSelectable = true
+        isBezeled = true
+        bezelStyle = .roundedBezel
+        alignment = .right
+        font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        usesSingleLineMode = true
+        cell?.isScrollable = true
+        cell?.wraps = false
         addSubview(arrows)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
-    }
-
-    override var intrinsicContentSize: NSSize {
-        // The time keeps its own width; the arrows sit after it, about as far from it as from the edge.
-        let size = cell?.cellSize ?? super.intrinsicContentSize
-        return NSSize(width: ceil(size.width) + StepArrows.width + StepArrows.rightMargin + 5, height: ceil(size.height))
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -137,44 +158,147 @@ final class TimeBoxControl: NSDatePicker {
                               width: StepArrows.width, height: newSize.height)
     }
 
-    @objc private func changed() {
-        onChange?(dateValue)
+    override func resetCursorRects() {
+        addCursorRect(NSRect(x: 0, y: 0, width: arrows.frame.minX, height: bounds.height), cursor: .iBeam)
     }
 
-    /// Steps the hour or minute the way the arrow keys do, which is how the Mac's own arrows work.
+    override func cursorUpdate(with event: NSEvent) {
+        if arrows.frame.contains(convert(event.locationInWindow, from: nil)) {
+            NSCursor.arrow.set()
+        } else {
+            super.cursorUpdate(with: event)
+        }
+    }
+}
+
+/// Keeps the text clear of the arrows.
+final class RoomForArrowsCell: NSTextFieldCell {
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        var rect = super.drawingRect(forBounds: rect)
+        rect.size.width = max(0, rect.size.width - StepArrows.width - 3)
+        return rect
+    }
+}
+
+// MARK: - The time boxes: From, Until and Time
+
+/// A time, written the Mac's way ("21:30" or "9:30 PM"). Type a time, or click the arrows (hold to keep going), or
+/// press ↑ and ↓. Like the Mac's own time boxes, the arrows change the hour, or the minutes when the cursor is in
+/// them (or AM/PM when it's there), and the part they change is selected.
+final class TimeBoxControl: ArrowBox, NSTextFieldDelegate {
+    var onChange: ((Int) -> Void)?
+    private(set) var minute = 0   // minutes after midnight
+    private enum Part { case hour, minute, half }
+
+    init() {
+        super.init(width: TimeBoxControl.width)
+        delegate = self
+        arrows.onStep = { [weak self] up in self?.step(up) }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    /// Wide enough for the longest time the Mac's way, such as "12:58 PM", with room for the arrows.
+    static var width: CGFloat {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let widest = [0, 10 * 60 + 58, 12 * 60 + 58, 23 * 60 + 58]
+            .map { (Format.time(minute: $0) as NSString).size(withAttributes: [.font: font]).width }
+            .max() ?? 60
+        return ceil(widest) + 34
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: TimeBoxControl.width, height: 22)
+    }
+
+    func show(_ minute: Int) {
+        self.minute = minute
+        stringValue = Format.time(minute: minute)
+    }
+
+    /// Each key you type: a time that makes sense counts straight away, so Save (or Return) keeps it.
+    func controlTextDidChange(_ obj: Notification) {
+        let symbols = DateFormatter()
+        guard let typed = TimeText.minute(from: stringValue, am: symbols.amSymbol, pm: symbols.pmSymbol) else { return }
+        minute = typed
+        onChange?(typed)
+    }
+
+    /// Leaving the box: the time written the Mac's way, or back to the last time that made sense.
+    func controlTextDidEndEditing(_ obj: Notification) {
+        stringValue = Format.time(minute: minute)
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        switch commandSelector {
+        case #selector(NSResponder.moveUp(_:)):
+            step(true)
+            return true
+        case #selector(NSResponder.moveDown(_:)):
+            step(false)
+            return true
+        default:
+            return false
+        }
+    }
+
     private func step(_ up: Bool) {
         guard let window else { return }
-        if window.firstResponder !== self {
-            window.makeFirstResponder(self)
+        var part = Part.hour
+        if let editor = currentEditor() {
+            part = self.part(at: editor.selectedRange.location, in: editor.string)
+        } else {
+            window.makeFirstResponder(self)   // like the Mac's own: the box takes the keyboard, the hour chosen
         }
-        let characters = String(utf16CodeUnits: [unichar(up ? NSUpArrowFunctionKey : NSDownArrowFunctionKey)], count: 1)
-        guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function],
-                                           timestamp: ProcessInfo.processInfo.systemUptime,
-                                           windowNumber: window.windowNumber, context: nil,
-                                           characters: characters, charactersIgnoringModifiers: characters,
-                                           isARepeat: false, keyCode: up ? 126 : 125) else { return }
-        keyDown(with: event)
-        changed()
+        var hour = minute / 60
+        var minutes = minute % 60
+        switch part {
+        case .hour: hour = (hour + (up ? 1 : 23)) % 24
+        case .minute: minutes = (minutes + (up ? 1 : 59)) % 60   // like the Mac's own, the hour stays
+        case .half: hour = (hour + 12) % 24
+        }
+        show(hour * 60 + minutes)
+        onChange?(minute)
+        choose(part)
+    }
+
+    private func part(at location: Int, in text: String) -> Part {
+        guard let parts = TimeText.parts(of: text) else { return .hour }
+        if location >= parts.minute.location && location <= NSMaxRange(parts.minute) { return .minute }
+        if let half = TimeText.half(in: text), location >= half.location && location <= NSMaxRange(half) { return .half }
+        return .hour
+    }
+
+    /// Selects the part the arrows just changed, as the Mac's own time boxes do.
+    private func choose(_ part: Part) {
+        guard let editor = currentEditor(), let parts = TimeText.parts(of: editor.string) else { return }
+        switch part {
+        case .hour: editor.selectedRange = parts.hour
+        case .minute: editor.selectedRange = parts.minute
+        case .half: editor.selectedRange = TimeText.half(in: editor.string) ?? parts.hour
+        }
     }
 }
 
 struct TimeBox: NSViewRepresentable {
     let label: String
-    @Binding var date: Date
+    @Binding var minute: Int
 
     func makeNSView(context: Context) -> TimeBoxControl {
-        let box = TimeBoxControl()   // shows the time the Mac's way, 24-hour or AM/PM
+        let box = TimeBoxControl()
         box.setAccessibilityLabel(label)
         box.arrows.name = label
-        box.dateValue = date
+        box.show(minute)
         return box
     }
 
     func updateNSView(_ box: TimeBoxControl, context: Context) {
-        let binding = $date
+        let binding = $minute
         box.onChange = { binding.wrappedValue = $0 }
-        if Format.minute(of: box.dateValue) != Format.minute(of: date) {
-            box.dateValue = date
+        if box.minute != minute && box.currentEditor() == nil {
+            box.show(minute)
         }
     }
 
@@ -187,30 +311,15 @@ struct TimeBox: NSViewRepresentable {
 
 /// A box for a whole number, with arrows: type it, or click the arrows (hold to keep counting), or press ↑ and ↓.
 /// Digits only, four at most.
-final class NumberBoxControl: NSTextField, NSTextFieldDelegate {
+final class NumberBoxControl: ArrowBox, NSTextFieldDelegate {
     var onChange: ((Int) -> Void)?
     var minimum = 0
-    let arrows = StepArrows()
-
-    override class var cellClass: AnyClass? {
-        get { RoomForArrowsCell.self }
-        set {}
-    }
 
     init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: 70, height: 22))
-        isEditable = true
-        isSelectable = true
-        isBezeled = true
-        bezelStyle = .roundedBezel
-        alignment = .right
+        super.init(width: 70)
         placeholderString = "0"
-        usesSingleLineMode = true
-        cell?.isScrollable = true
-        cell?.wraps = false
         delegate = self
         arrows.onStep = { [weak self] up in self?.step(up ? 1 : -1) }
-        addSubview(arrows)
     }
 
     required init?(coder: NSCoder) {
@@ -224,13 +333,7 @@ final class NumberBoxControl: NSTextField, NSTextFieldDelegate {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 70, height: 22)   // as tall as the time boxes and the boxes before
-    }
-
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        arrows.frame = NSRect(x: newSize.width - StepArrows.width - StepArrows.rightMargin, y: 0,
-                              width: StepArrows.width, height: newSize.height)
+        NSSize(width: 70, height: 22)   // as tall as the time boxes
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -262,15 +365,6 @@ final class NumberBoxControl: NSTextField, NSTextFieldDelegate {
         let next = min(max(current + by, minimum), 9999)
         stringValue = String(next)
         onChange?(next)
-    }
-}
-
-/// Keeps the digits clear of the arrows.
-final class RoomForArrowsCell: NSTextFieldCell {
-    override func drawingRect(forBounds rect: NSRect) -> NSRect {
-        var rect = super.drawingRect(forBounds: rect)
-        rect.size.width = max(0, rect.size.width - StepArrows.width - 3)
-        return rect
     }
 }
 

@@ -86,10 +86,10 @@ struct EditorView: View {
 
                     if model.kind == .repeating {
                         LabeledContent("From") {
-                            TimeBox(label: "From", date: minuteBinding(\.fromMinute))
+                            TimeBox(label: "From", minute: $model.alarm.fromMinute)
                         }
                         LabeledContent("Until") {
-                            TimeBox(label: "Until", date: minuteBinding(\.untilMinute))
+                            TimeBox(label: "Until", minute: $model.alarm.untilMinute)
                         }
                         LabeledContent("Every") {
                             HStack(spacing: 6) {
@@ -105,7 +105,7 @@ struct EditorView: View {
                         }
                     } else if model.kind == .once {
                         LabeledContent("Time") {
-                            TimeBox(label: "Time", date: minuteBinding(\.timeMinute))
+                            TimeBox(label: "Time", minute: $model.alarm.timeMinute)
                         }
                     }
 
@@ -232,13 +232,6 @@ struct EditorView: View {
         case .some(.once): return 452
         case .none: return 412
         }
-    }
-
-    private func minuteBinding(_ keyPath: WritableKeyPath<Alarm, Int>) -> Binding<Date> {
-        Binding(
-            get: { Format.date(minute: model.alarm[keyPath: keyPath]) },
-            set: { model.alarm[keyPath: keyPath] = Format.minute(of: $0) }
-        )
     }
 
     private var soundBinding: Binding<String> {

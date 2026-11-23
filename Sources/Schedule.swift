@@ -163,11 +163,6 @@ enum Format {
         Schedule.at(minute, on: Date()) ?? Date()
     }
 
-    static func minute(of date: Date) -> Int {
-        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-    }
-
     /// "at 20:45", "tomorrow at 07:00", "on Mon at 10:00"
     static func when(_ date: Date, from now: Date = Date()) -> String {
         let calendar = Calendar.current
@@ -239,5 +234,103 @@ enum Format {
         case .once:
             return "\(time(minute: alarm.timeMinute)) · \(days(alarm))"
         }
+    }
+}
+
+// MARK: - Times typed into the editor's time boxes
+
+enum TimeText {
+    /// A time typed into a time box, as minutes after midnight: "7", "730", "0730", "7:30", "7.30", "19:30",
+    /// "7:30 pm", "7pm". `am` and `pm` are how the Mac writes them ("AM", "PM"). Nil when it isn't a time (yet).
+    static func minute(from typed: String, am: String = "AM", pm: String = "PM") -> Int? {
+        var text = String(typed.lowercased().filter { !$0.isWhitespace })
+        var half: Int?   // 0 for AM, 12 for PM
+        let marks = [(pm, 12), ("p.m.", 12), ("pm", 12), ("p", 12), (am, 0), ("a.m.", 0), ("am", 0), ("a", 0)]
+            .map { mark, value in (String(mark.lowercased().filter { character in !character.isWhitespace }), value) }
+            .filter { mark, _ in !mark.isEmpty }
+            .sorted { first, second in first.0.count > second.0.count }   // the longest first: "pm" before "p"
+        for (mark, value) in marks {
+            if text.hasSuffix(mark) {
+                text.removeLast(mark.count)
+                half = value
+                break
+            }
+            if text.hasPrefix(mark) {   // some languages write it first
+                text.removeFirst(mark.count)
+                half = value
+                break
+            }
+        }
+        func digits(_ part: Substring) -> [Int]? {
+            let values = part.map(\.wholeNumberValue)
+            return part.isEmpty || values.contains(nil) ? nil : values.compactMap { $0 }
+        }
+        func number(_ digits: [Int]) -> Int { digits.reduce(0) { $0 * 10 + $1 } }
+
+        var hour: Int
+        var minute: Int
+        let pieces = text.split(omittingEmptySubsequences: false) { ":.h".contains($0) }
+        switch pieces.count {
+        case 1:
+            guard let all = digits(pieces[0]) else { return nil }
+            switch all.count {
+            case 1, 2: hour = number(all); minute = 0
+            case 3: hour = all[0]; minute = number(Array(all[1...]))
+            case 4: hour = number(Array(all[..<2])); minute = number(Array(all[2...]))
+            default: return nil
+            }
+        case 2:
+            guard let h = digits(pieces[0]), let m = digits(pieces[1]), h.count <= 2, m.count <= 2 else { return nil }
+            hour = number(h)
+            minute = number(m)
+        default:
+            return nil
+        }
+        guard minute < 60 else { return nil }
+        if let half {
+            guard (1...12).contains(hour) else { return nil }
+            hour = hour % 12 + half
+        } else if hour > 23 {
+            return nil
+        }
+        return hour * 60 + minute
+    }
+
+    /// Where the hour and the minutes are in a time as written ("09:30", "9:30 PM"): its first two runs of digits.
+    static func parts(of text: String) -> (hour: NSRange, minute: NSRange)? {
+        let characters = text as NSString
+        var runs: [NSRange] = []
+        var index = 0
+        while index < characters.length {
+            guard isDigit(characters.character(at: index)) else {
+                index += 1
+                continue
+            }
+            let start = index
+            while index < characters.length && isDigit(characters.character(at: index)) { index += 1 }
+            runs.append(NSRange(location: start, length: index - start))
+        }
+        return runs.count >= 2 ? (runs[0], runs[1]) : nil
+    }
+
+    /// Where AM or PM is, when the time has it: its letters.
+    static func half(in text: String) -> NSRange? {
+        let characters = text as NSString
+        var first: Int?
+        var last = 0
+        for index in 0..<characters.length where isLetter(characters.character(at: index)) {
+            if first == nil { first = index }
+            last = index
+        }
+        guard let first else { return nil }
+        return NSRange(location: first, length: last - first + 1)
+    }
+
+    private static func isDigit(_ character: unichar) -> Bool {
+        UnicodeScalar(character).map { CharacterSet.decimalDigits.contains($0) } ?? false
+    }
+
+    private static func isLetter(_ character: unichar) -> Bool {
+        UnicodeScalar(character).map { CharacterSet.letters.contains($0) } ?? false
     }
 }

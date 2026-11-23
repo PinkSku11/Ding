@@ -204,6 +204,8 @@ for line in open(log):
         x, y, w, h = map(float, words[3:7])
         if part == "text":
             print(int(x - 20), int(y + h / 2))
+        elif part == "box":   # a region around the box's right end, for screenshots
+            print(f"{int(x - 60)},{int(y - 6)},{int(w + 70)},{int(h + 12)}")
         else:
             print(int(x + w / 2), int(y + h / 2 + (-5 if part == "up" else 5)))
         break
@@ -252,6 +254,34 @@ if (alarm["every"], alarm["plays"]) != (20, 6):
     print("ARROWS TEST PROBLEM: expected every 20 (typed) and plays 6 (Tab, 5, then the up arrow key)")
     sys.exit(1)
 print("OK: typing, Tab to the next box and the up arrow key work")
+PY
+echo "-- a time typed into From, then the minutes stepped with the up arrow key and the arrows"
+rm -f /tmp/ding-arrows.log
+open -n "$APP" --args -DingShow editor-arrows -DingDark YES -DingRingLog /tmp/ding-arrows.log
+sleep 5
+python3 ci/click.py tripleclick $(arrow From text); sleep 0.3    # select the time in From
+python3 ci/click.py type "7:45"; sleep 0.3                      # a time typed in
+python3 ci/click.py key up; sleep 0.3                           # the cursor is in the minutes: 7:46
+python3 ci/click.py click $(arrow From up); sleep 0.4           # the minutes are still chosen: 7:47
+screencapture -x "$OUT/arrows-time-typed.png"
+python3 ci/click.py key tab; sleep 0.3
+echo "-- the pointer over the arrows and over the text"
+python3 ci/click.py move $(arrow Every up); sleep 0.6
+screencapture -C -x -R $(arrow Every box) "$OUT/pointer-every-arrows.png"
+python3 ci/click.py move $(arrow Every text); sleep 0.6
+screencapture -C -x -R $(arrow Every box) "$OUT/pointer-every-text.png"
+python3 ci/click.py move $(arrow Until up); sleep 0.6
+screencapture -C -x -R $(arrow Until box) "$OUT/pointer-until-arrows.png"
+python3 ci/click.py key return; sleep 1.5
+pkill -x Ding 2>/dev/null; sleep 1
+python3 - "$SUPPORT/alarms.json" <<'PY' || TEST_OK=0
+import json, sys
+alarm = next(a for a in json.load(open(sys.argv[1])) if a["name"] == "Water break")
+print(f"After typing a time: from {alarm['fromMinute']}, until {alarm['untilMinute']}")
+if (alarm["fromMinute"], alarm["untilMinute"]) != (467, 1320):
+    print("ARROWS TEST PROBLEM: expected from 467 (7:45 typed, then up twice in the minutes) and until 1320")
+    sys.exit(1)
+print("OK: a typed time counts, and with the cursor in the minutes the key and the arrows change the minutes")
 PY
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 

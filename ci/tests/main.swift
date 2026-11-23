@@ -362,6 +362,37 @@ do {
           "missed over a week ago: \(Format.past(longAgo, from: now))")
 }
 
+// MARK: Times typed into a time box
+
+do {
+    let t = { (typed: String) in TimeText.minute(from: typed) }
+    check(t("7") == 420 && t("07") == 420 && t("730") == 450 && t("0730") == 450 && t("7:30") == 450
+          && t("7.30") == 450 && t("19:30") == 1170 && t("0:05") == 5 && t("23:59") == 1439,
+          "typed 24-hour times: 7:30 is \(String(describing: t("7:30"))), 730 is \(String(describing: t("730")))")
+    check(t("7:30 pm") == 1170 && t("7:30PM") == 1170 && t("7pm") == 1140 && t("12 am") == 0 && t("12:15 pm") == 735
+          && t("7:30 a.m.") == 450 && t("7:30\u{202F}PM") == 1170,
+          "typed AM/PM times: 7:30 pm is \(String(describing: t("7:30 pm")))")
+    check(t("") == nil && t("7:") == nil && t("24:00") == nil && t("7:60") == nil && t("13 pm") == nil
+          && t("abc") == nil && t("12345") == nil && t("7:3:0") == nil, "things that aren't a time")
+    check(TimeText.minute(from: "오후 7:30", am: "오전", pm: "오후") == 1170, "AM/PM written first, as in Korean")
+
+    let ampm = "9:05\u{202F}PM"
+    check(TimeText.parts(of: ampm).map { [$0.hour, $0.minute] }
+          == [NSRange(location: 0, length: 1), NSRange(location: 2, length: 2)], "the hour and the minutes in 9:05 PM")
+    check(TimeText.half(in: ampm) == NSRange(location: 5, length: 2), "PM in 9:05 PM")
+    check(TimeText.parts(of: "21:05").map { [$0.hour, $0.minute] }
+          == [NSRange(location: 0, length: 2), NSRange(location: 3, length: 2)], "the hour and the minutes in 21:05")
+    check(TimeText.half(in: "21:05") == nil, "no AM/PM in 21:05")
+
+    // Every time as the Mac writes it can be read back, so editing a time in the box keeps it.
+    let symbols = DateFormatter()
+    let samples = [0, 5, 59, 60, 61, 719, 720, 721, 1170, 1439]
+    let unread = samples.filter {
+        TimeText.minute(from: Format.time(minute: $0), am: symbols.amSymbol, pm: symbols.pmSymbol) != $0
+    }
+    check(unread.isEmpty, "times as shown read back: \(unread.map { Format.time(minute: $0) })")
+}
+
 // MARK: What counts as a call
 
 do {
