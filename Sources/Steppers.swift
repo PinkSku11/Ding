@@ -7,6 +7,7 @@ import SwiftUI
 /// A click steps once; holding the mouse button down keeps stepping.
 final class StepArrows: NSView {
     static let width: CGFloat = 13
+    static let rightMargin: CGFloat = 4   // from the box's right edge
     var onStep: ((Bool) -> Void)?    // true: up
     var name = ""                    // the box's label, for the build machine's log
     private var held: Bool?          // the arrow being held down: true for up
@@ -125,13 +126,15 @@ final class TimeBoxControl: NSDatePicker {
     }
 
     override var intrinsicContentSize: NSSize {
+        // The time keeps its own width; the arrows sit after it, about as far from it as from the edge.
         let size = cell?.cellSize ?? super.intrinsicContentSize
-        return NSSize(width: ceil(size.width) + StepArrows.width + 6, height: ceil(size.height))
+        return NSSize(width: ceil(size.width) + StepArrows.width + StepArrows.rightMargin + 5, height: ceil(size.height))
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        arrows.frame = NSRect(x: newSize.width - StepArrows.width - 5, y: 0, width: StepArrows.width, height: newSize.height)
+        arrows.frame = NSRect(x: newSize.width - StepArrows.width - StepArrows.rightMargin, y: 0,
+                              width: StepArrows.width, height: newSize.height)
     }
 
     @objc private func changed() {
@@ -227,12 +230,13 @@ final class NumberBoxControl: NSTextField, NSTextFieldDelegate {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 70, height: super.intrinsicContentSize.height)
+        NSSize(width: 70, height: 22)   // as tall as the time boxes and the boxes before
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        arrows.frame = NSRect(x: newSize.width - StepArrows.width - 5, y: 0, width: StepArrows.width, height: newSize.height)
+        arrows.frame = NSRect(x: newSize.width - StepArrows.width - StepArrows.rightMargin, y: 0,
+                              width: StepArrows.width, height: newSize.height)
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -271,7 +275,7 @@ final class NumberBoxControl: NSTextField, NSTextFieldDelegate {
 final class RoomForArrowsCell: NSTextFieldCell {
     override func drawingRect(forBounds rect: NSRect) -> NSRect {
         var rect = super.drawingRect(forBounds: rect)
-        rect.size.width = max(0, rect.size.width - StepArrows.width - 4)
+        rect.size.width = max(0, rect.size.width - StepArrows.width - 3)
         return rect
     }
 }
