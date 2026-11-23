@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         Notifier.shared.setUp()
         Notifier.shared.onClick = { id in Ringer.shared.notificationClicked(id) }
-        Notifier.shared.onSnooze = { id in Engine.shared.snoozeNow(id) }
+        Notifier.shared.onSnooze = { id, minutes in Engine.shared.snoozeNow(id, minutes: minutes) }
         Ringer.shared.onChange = { [weak self] in self?.refreshIcon() }
         AlarmStore.shared.onChange = { Engine.shared.recompute() }
         Engine.shared.onStateChange = { [weak self] in self?.refreshIcon() }

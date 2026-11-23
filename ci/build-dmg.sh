@@ -364,7 +364,8 @@ FIRST=$(python3 ci/live-alarms.py "$SUPPORT/alarms.json")
 if [ -n "$FIRST" ]; then
     rm -f /tmp/ding-rings.log
     open -n "$APP" --args -DingRingLog /tmp/ding-rings.log \
-        -DingTestSnooze 00000000-0000-4000-8000-0000000000B2 -DingSnoozeSeconds 60
+        -DingTestSnooze 00000000-0000-4000-8000-0000000000B2 -DingTestSnoozeButton ding.snooze.15 \
+        -DingSnoozeSeconds 60
     WAIT=$(python3 -c "import time; print(max(0, int($FIRST + 5 * 60 + 20 - time.time())))")
     echo "First ring at $FIRST, waiting $WAIT s"
     sleep "$WAIT"

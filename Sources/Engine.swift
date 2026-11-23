@@ -128,21 +128,21 @@ final class Engine: NSObject {
 
     // MARK: Snooze
 
-    /// How long "Snooze 5 min" waits. The build machine's live test makes it shorter.
-    private var snoozeLength: TimeInterval {
+    /// How long a snooze waits. The build machine's live test makes it shorter.
+    private func snoozeLength(_ minutes: Int) -> TimeInterval {
         let test = UserDefaults.standard.double(forKey: "DingSnoozeSeconds")
-        return test > 0 ? test : 5 * 60
+        return test > 0 ? test : TimeInterval(minutes * 60)
     }
 
-    /// "Snooze 5 min" on the notification: stop this alarm's ring, and ring it again five minutes from now.
+    /// A snooze button on the notification: stop this alarm's ring, and ring it again that many minutes from now.
     /// It rings even if the alarm has switched itself off since (a one-time alarm).
-    func snoozeNow(_ id: UUID) {
+    func snoozeNow(_ id: UUID, minutes: Int) {
         Ringer.shared.stop(id)
         guard AlarmStore.shared.alarm(id) != nil else { return }
-        let time = Date().addingTimeInterval(snoozeLength)
+        let time = Date().addingTimeInterval(snoozeLength(minutes))
         snoozes[id] = time
         saveSnoozes()
-        RingLog.write("snooze \(id.uuidString) until \(time.timeIntervalSince1970)")
+        RingLog.write("snooze \(id.uuidString) for \(minutes) min until \(time.timeIntervalSince1970)")
         updateKeepAwake(Date())
         onStateChange?()
     }

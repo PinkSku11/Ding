@@ -7,7 +7,7 @@ A, B, C, D, E, F, G = ("00000000-0000-4000-8000-0000000000" + s for s in ("A1", 
 names = {A: "Every minute", B: "One-off", C: "Same minute", D: "Switched off", E: "Silent", F: "Long sound",
          G: "After a snooze"}
 
-rings, offs, skipped, busy, snoozes, kept, cleared = {}, set(), [], {}, set(), set(), set()
+rings, offs, skipped, busy, snoozes, kept, cleared = {}, set(), [], {}, {}, set(), set()
 for line in open(log_path):
     parts = line.split()
     if len(parts) < 3:
@@ -21,8 +21,8 @@ for line in open(log_path):
         skipped.append(names.get(alarm, alarm))
     elif kind == "busy":
         busy.setdefault(alarm, []).append(round((float(parts[4]) - first) / 60))
-    elif kind == "snooze":
-        snoozes.add(alarm)
+    elif kind == "snooze":   # snooze ID for N min until T
+        snoozes[alarm] = int(parts[4]) if len(parts) > 4 and parts[3] == "for" else None
     elif kind == "keep":
         kept.add(alarm)
     elif kind == "clear":
@@ -47,13 +47,17 @@ def expect(alarm, minutes, sounds=("played", "silent")):
 
 
 expect(A, [0, 1, 2, 3, 4], sounds=("played",))
-# The one-off's first ring is snoozed (as a click on "Snooze 5 min" would; 60 seconds in this test).
+# The one-off's first ring is snoozed, as a click on "Snooze 15 min" would (60 seconds in this test).
 # It rings once more about a minute later, even though a one-time alarm switches itself off after it rings.
 b_rings = rings.get(B, [])
 rings[B] = b_rings[:1]
 expect(B, [1], sounds=("played",))
 if B not in snoozes:
     problems.append("the one-off alarm wasn't snoozed")
+elif snoozes[B] != 15:
+    problems.append(f"the one-off was snoozed for {snoozes[B]} min, expected 15 (the Snooze 15 min button)")
+else:
+    print("  The one-off was snoozed with the Snooze 15 min button: snooze for 15 min")
 if len(b_rings) != 2:
     problems.append(f"the snoozed alarm rang {len(b_rings)} times, expected 2")
 else:

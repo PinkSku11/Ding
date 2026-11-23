@@ -334,3 +334,21 @@ enum TimeText {
         UnicodeScalar(character).map { CharacterSet.letters.contains($0) } ?? false
     }
 }
+
+// MARK: - Snoozing from the notification
+
+/// The snooze lengths a ringing alarm's notification offers, a button each. With more than one button,
+/// macOS shows them in the notification's Options menu.
+enum Snooze {
+    static let lengths = [5, 10, 15, 30]
+
+    /// A button's id, which macOS hands back when the button is clicked.
+    static func action(_ minutes: Int) -> String { "ding.snooze.\(minutes)" }
+
+    static func title(_ minutes: Int) -> String { "Snooze \(minutes) min" }
+
+    /// How long a clicked button snoozes for; nil for anything else, such as a click on the notification itself.
+    static func minutes(ofAction id: String) -> Int? {
+        lengths.first { action($0) == id }
+    }
+}

@@ -12,7 +12,7 @@ Ding is the bell in the menu bar. Click it for your alarms, and click an alarm t
 
 Times show the way your Mac shows them, 24-hour or AM/PM, as set in System Settings → General → Date & Time.
 
-When an alarm rings, click its notification or the bell to stop it, or click Snooze 5 min on the notification to hear it again five minutes later. Ding clears each notification after the ring, unless that alarm has "Keep in Notification Center" on; then its latest notification stays there.
+When an alarm rings, click its notification or the bell to stop it. To hear it again later, snooze it from the notification: its Options menu has Snooze 5, 10, 15 and 30 min. Ding clears each notification after the ring, unless that alarm has "Keep in Notification Center" on; then its latest notification stays there.
 
 ## Updating
 

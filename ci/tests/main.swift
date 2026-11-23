@@ -393,6 +393,22 @@ do {
     check(unread.isEmpty, "times as shown read back: \(unread.map { Format.time(minute: $0) })")
 }
 
+// MARK: Snooze buttons on the notification
+
+do {
+    check(Snooze.lengths == [5, 10, 15, 30], "snooze lengths: \(Snooze.lengths)")
+    let titles = Snooze.lengths.map(Snooze.title)
+    check(titles == ["Snooze 5 min", "Snooze 10 min", "Snooze 15 min", "Snooze 30 min"], "button names: \(titles)")
+    check(Set(Snooze.lengths.map(Snooze.action)).count == Snooze.lengths.count, "each button has its own id")
+    check(Snooze.lengths.allSatisfy { Snooze.minutes(ofAction: Snooze.action($0)) == $0 },
+          "each button snoozes for its own minutes")
+    // A click on the notification itself, closing it, or a button Ding doesn't have isn't a snooze.
+    for other in ["com.apple.UNNotificationDefaultActionIdentifier", "com.apple.UNNotificationDismissActionIdentifier",
+                  "ding.snooze", "ding.snooze.7", ""] {
+        check(Snooze.minutes(ofAction: other) == nil, "\"\(other)\" isn't a snooze button")
+    }
+}
+
 // MARK: What counts as a call
 
 do {

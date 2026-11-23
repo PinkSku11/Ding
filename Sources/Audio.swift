@@ -209,6 +209,8 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
     private var previewing = false
     private var playerStarted = Date()
     private static let testSnooze = UserDefaults.standard.string(forKey: "DingTestSnooze").flatMap(UUID.init(uuidString:))
+    private static let testSnoozeButton = UserDefaults.standard.string(forKey: "DingTestSnoozeButton")
+        ?? Snooze.action(Snooze.lengths[0])
     private var testSnoozed = false
 
     private override init() {
@@ -278,9 +280,11 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         let played = result == .played
         RingLog.write("ring \(ring.alarm.id.uuidString) due \(ring.time.timeIntervalSince1970) sound \(played ? "played" : "silent") \(result.logWord)")
         if let test = Ringer.testSnooze, test == ring.alarm.id, !testSnoozed {
-            // The build machine's live test: press "Snooze 5 min" on this alarm's first ring, as a click would.
+            // The build machine's live test: click a snooze button on this alarm's first ring.
             testSnoozed = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { Engine.shared.snoozeNow(test) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                Notifier.shared.respond(Ringer.testSnoozeButton, alarm: test, notification: posted)
+            }
         }
         if !played {
             // No sound this time (Sound is None, a call, or the Mac is muted): just the notification.
