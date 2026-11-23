@@ -113,10 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Ringer.shared.stopAll()
     }
 
-    /// Opening Ding again (from Spotlight, Finder or Launchpad) shows the alarm list next to the pointer,
-    /// so it's always reachable even if the bell is hidden behind the notch.
+    /// Opening Ding again (from Spotlight, Finder or Launchpad, or a click on its notification) shows the alarm
+    /// list next to the pointer, so it's always reachable even if the bell is hidden behind the notch.
+    /// The options stay on a right click on the bell.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        buildAlarmMenu(includeOptions: true).popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        buildAlarmMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         return false
     }
 
@@ -219,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Click: the alarm list.
-    private func buildAlarmMenu(includeOptions: Bool = false) -> NSMenu {
+    private func buildAlarmMenu() -> NSMenu {
         let menu = newMenu()
         let alarms = sortedAlarms()
 
@@ -270,11 +271,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let spacer = NSMenuItem()
             spacer.view = MenuSpacerView(height: 8)
             menu.addItem(spacer)
-        }
-
-        if includeOptions {
-            menu.addItem(.separator())
-            addOptions(to: menu)
         }
         return menu
     }

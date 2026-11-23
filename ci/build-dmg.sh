@@ -138,6 +138,16 @@ shoot new new-alarm dark || TEST_OK=0
 shoot menu-plus new-from-menu dark || TEST_OK=0
 shoot menu menu-light || TEST_OK=0
 shoot options options dark || TEST_OK=0
+echo "-- opening Ding again (as a click on its notification does) shows the alarm list without the options"
+pkill -x Ding 2>/dev/null; sleep 1
+open -n "$APP" --args -DingDark YES
+sleep 4
+open "$APP"            # Ding is running already: this opens it again
+sleep 2
+screencapture -x "$OUT/reopen.png"
+python3 ci/click.py key escape
+sleep 1
+pkill -x Ding; sleep 1
 
 echo
 echo "== Switch test: film the menu while an alarm is switched off"
