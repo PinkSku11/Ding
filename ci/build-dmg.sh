@@ -237,6 +237,8 @@ python3 ci/click.py click 961 121; sleep 1.2     # Stop
 python3 ci/click.py click 795 12; sleep 1.2
 python3 ci/click.py click 971 112; sleep 1       # Custom: 37 is there, selected
 python3 ci/click.py type "1x2"; sleep 0.6        # the x doesn't go in
+python3 ci/click.py key delete; sleep 0.3        # Delete takes the 2 out
+python3 ci/click.py type "5"; sleep 0.6
 screencapture -x "$OUT/timer-custom-typed-again.png"
 python3 ci/click.py click 965 148; sleep 1.5     # Start
 python3 ci/click.py click 795 12; sleep 1.2
@@ -259,7 +261,7 @@ steps = [l.split(" ends ")[0] for l in lines
 want = ["timer started 300", "timer stopped",
         "timer custom", "timer started 480", "timer stopped",
         "timer custom", "timer started 2220", "timer stopped",
-        "timer custom", "timer started 720", "timer stopped",
+        "timer custom", "timer started 900", "timer stopped",
         "timer custom", "timer custom closed", "timer started 300", "timer stopped"]
 typed = [l for l in lines if l.startswith("timer typed ")]
 problems = []
@@ -272,7 +274,8 @@ if sys.argv[2] != "Finder":
 if problems:
     print("FAIL: " + "; ".join(problems)); sys.exit(1)
 print("OK: 5 min and Stop work; Custom with 8 and Return started 8 minutes; with Finder in front, 37 and Return")
-print("    started 37, 1x2 and Start started 12, a second click on Custom closed the row, and Finder kept the keyboard")
+print("    started 37, 1x2, Delete, 5 and Start started 15, a second click on Custom closed the row, and Finder kept")
+print("    the keyboard")
 PY2
 
 echo "-- a 20-second timer rings like an alarm, and a click on the blue bell stops it"

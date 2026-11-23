@@ -380,7 +380,7 @@ final class TimerSectionView: NSView {
             RingLog.write("timer custom")
             box.focus()   // what you type goes straight in, even with another app in front
         } else {
-            window?.makeFirstResponder(nil)
+            box.unfocus()
             RingLog.write("timer custom closed")
         }
     }
@@ -412,6 +412,8 @@ final class MinutesBox: NSView, NSTextFieldDelegate {
     var onChange: ((Int?) -> Void)?
     var onReturn: (() -> Void)?
     private let field = NSTextField(string: "")
+    private let caret = NSView()
+    private var blink: Timer?
 
     var text: String {
         get { field.stringValue }
@@ -442,6 +444,9 @@ final class MinutesBox: NSView, NSTextFieldDelegate {
         let fieldHeight = ceil(field.intrinsicContentSize.height)
         field.frame = NSRect(x: 6, y: ((height - fieldHeight) / 2).rounded(), width: bounds.width - 12, height: fieldHeight)
         addSubview(field)
+        caret.wantsLayer = true
+        caret.isHidden = true
+        addSubview(caret)
         updateColors()
     }
 
@@ -453,7 +458,53 @@ final class MinutesBox: NSView, NSTextFieldDelegate {
     func focus() {
         window?.makeFirstResponder(field)
         field.currentEditor()?.selectAll(nil)
+        showCaret()
         RingLog.write("timer box ready, Ding \(NSApp.isActive ? "active" : "in the background")")
+    }
+
+    /// When the row closes.
+    func unfocus() {
+        stopCaret()
+        window?.makeFirstResponder(nil)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { stopCaret() }   // the list closed
+    }
+
+    /// In the list, the box can't draw its own blinking cursor (it only does in the key window), so it
+    /// draws one: a thin line where the next digit goes, shown after each key and blinking in between.
+    private func showCaret() {
+        blink?.invalidate()
+        placeCaret(visible: true)
+        let timer = Timer(timeInterval: 0.53, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.placeCaret(visible: self.caret.isHidden)
+        }
+        RunLoop.main.add(timer, forMode: .common)   // while the list is open, only these timers fire
+        blink = timer
+    }
+
+    private func stopCaret() {
+        blink?.invalidate()
+        blink = nil
+        caret.isHidden = true
+    }
+
+    private func placeCaret(visible: Bool) {
+        // No cursor while the digits are selected, or when the box draws its own.
+        guard let editor = field.currentEditor(), editor.selectedRange.length == 0, window?.isKeyWindow != true else {
+            caret.isHidden = true
+            return
+        }
+        let attributes: [NSAttributedString.Key: Any] = [.font: field.font ?? NSFont.systemFont(ofSize: 13)]
+        let text = field.stringValue as NSString
+        let before = text.substring(to: min(editor.selectedRange.location, text.length)) as NSString
+        let x = field.frame.midX - text.size(withAttributes: attributes).width / 2
+            + before.size(withAttributes: attributes).width   // the digits are centred
+        caret.frame = NSRect(x: x.rounded(), y: field.frame.minY + 1, width: 2, height: field.frame.height - 2)
+        caret.isHidden = !visible
     }
 
     override func mouseDown(with event: NSEvent) {   // a click on the box around the digits
@@ -467,6 +518,7 @@ final class MinutesBox: NSView, NSTextFieldDelegate {
         }
         RingLog.write("timer typed \(digits)")
         onChange?(DingTimer.minutes(digits))
+        showCaret()
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -481,6 +533,7 @@ final class MinutesBox: NSView, NSTextFieldDelegate {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             self.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.09).cgColor
             self.layer?.borderColor = NSColor.controlAccentColor.cgColor
+            self.caret.layer?.backgroundColor = NSColor.controlAccentColor.cgColor   // like the Mac's own cursor
         }
     }
 

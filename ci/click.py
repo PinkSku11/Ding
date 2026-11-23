@@ -3,7 +3,7 @@
     python3 click.py click X Y     click at a screen point (top-left origin)
     python3 click.py type TEXT     type text into whatever has keyboard focus
     python3 click.py tripleclick X Y   triple-click, which selects all the text in a field
-    python3 click.py key return    press Return (also: down, up, escape)
+    python3 click.py key return    press Return (also: down, up, escape, delete)
     python3 click.py drag X1 Y1 X2 Y2   press at one point, drag to the other, let go
 """
 import ctypes
@@ -52,7 +52,7 @@ elif sys.argv[1] == "tripleclick":
         time.sleep(0.05)
     print("triple-clicked at", point.x, point.y)
 elif sys.argv[1] == "key":
-    code = {"return": 36, "down": 125, "up": 126, "escape": 53}[sys.argv[2]]
+    code = {"return": 36, "down": 125, "up": 126, "escape": 53, "delete": 51}[sys.argv[2]]
     for down in (True, False):
         cg.CGEventPost(0, cg.CGEventCreateKeyboardEvent(None, code, down))
         time.sleep(0.04)
