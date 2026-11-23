@@ -5,6 +5,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var editor: EditorController?
     private var lastAddAction: (() -> Void)?   // the + in the most recent alarm list (used by the build machine's test)
+    private weak var timerSection: TimerSectionView?   // the timer row in the open menu, to count down in
+    private var countdownTicker: Timer?
+    private var shownCountdown = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Only one Ding at a time, or every alarm would ring twice. The copy you just opened wins.
@@ -33,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Engine.shared.onStateChange = { [weak self] in self?.refreshIcon() }
         AlarmStore.shared.moveKeepAwakeIntoAlarms()
         Engine.shared.start()
+        let testTimer = UserDefaults.standard.double(forKey: "DingTestTimer")   // the build machine's timer test
+        if testTimer > 0 { Engine.shared.startTimer(testTimer) }
         refreshIcon()
 
         if !Settings.launchedBefore {
@@ -122,10 +127,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alarms = AlarmStore.shared.alarms
         if Ringer.shared.isRinging {
             button.image = StatusIcon.ringing
-        } else if !alarms.isEmpty && !alarms.contains(where: { $0.isOn }) && !Engine.shared.hasSnoozes {
+        } else if !alarms.isEmpty && !alarms.contains(where: { $0.isOn }) && !Engine.shared.hasSnoozes
+                    && Engine.shared.runningTimer == nil {
             button.image = StatusIcon.bellOff
         } else {
             button.image = StatusIcon.bell
+        }
+        updateCountdown()
+    }
+
+    /// While the timer runs, the time left shows next to the bell, and in the menu while it's open.
+    private func updateCountdown() {
+        guard let button = statusItem?.button else { return }
+        let timer = Engine.shared.runningTimer
+        var text = ""
+        if let timer, !Ringer.shared.isRinging {
+            text = Format.countdown(Int(ceil(timer.end.timeIntervalSinceNow)))
+        }
+        if text != shownCountdown {
+            shownCountdown = text
+            button.font = .monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
+            button.title = text
+            button.imagePosition = text.isEmpty ? .imageOnly : .imageLeading
+        }
+        timerSection?.refresh()
+        if timer != nil {
+            if countdownTicker == nil {
+                let ticker = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.updateCountdown() }
+                RunLoop.main.add(ticker, forMode: .common)
+                countdownTicker = ticker
+            }
+        } else if let ticker = countdownTicker {
+            ticker.invalidate()
+            countdownTicker = nil
         }
     }
 
@@ -190,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alarms = sortedAlarms()
 
         if alarms.isEmpty {
+            menu.addItem(timerItem(in: menu))   // the timer works without any alarm
             let item = NSMenuItem()
             item.view = EmptyStateView { [weak self, weak menu] in
                 let anchor = menu?.items.first?.view?.window?.frame
@@ -202,6 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let headerView = NextHeaderView(text: nextText())
             header.view = headerView
             menu.addItem(header)
+            menu.addItem(timerItem(in: menu))
             let alarmsHeader = NSMenuItem()
             let addAction = { [weak self, weak menu] in
                 let anchor = menu?.items.first?.view?.window?.frame   // where the list is on screen
@@ -241,6 +277,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             addOptions(to: menu)
         }
         return menu
+    }
+
+    /// The timer row. Picking a length starts the timer and closes the menu, so the countdown shows next
+    /// to the bell; Stop stops it.
+    private func timerItem(in menu: NSMenu) -> NSMenuItem {
+        let item = NSMenuItem()
+        let view = TimerSectionView(
+            timer: Engine.shared.runningTimer,
+            onStart: { [weak menu] length in
+                Engine.shared.startTimer(length)
+                menu?.cancelTracking()
+            },
+            onStop: { [weak menu] in
+                Engine.shared.stopTimer()
+                menu?.cancelTracking()
+            })
+        item.view = view
+        timerSection = view
+        return item
     }
 
     private func addOptions(to menu: NSMenu) {

@@ -309,3 +309,25 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "launchedBefore") }
     }
 }
+
+// MARK: - Timer
+
+/// The timer: it rings once, `length` after it was started.
+struct DingTimer: Equatable {
+    let end: Date
+    let length: TimeInterval
+
+    /// The id its rings and notifications use. A timer isn't one of your alarms.
+    static let alarmID = UUID(uuidString: "7D1A3E52-0000-4000-8000-00000000D1E7")!
+
+    /// The lengths "…" steps through with − and +, in minutes: every minute up to 10, then wider steps
+    /// up to 12 hours.
+    static let lengths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60,
+                          75, 90, 105, 120, 150, 180, 240, 300, 360, 480, 600, 720]
+
+    /// How it rings: the sound a new alarm starts with, for 30 seconds or until you stop it.
+    var alarm: Alarm {
+        Alarm(id: DingTimer.alarmID, name: Format.timerName(length), kind: .once,
+              sound: "Glass", plays: 30, playUnit: .seconds, volume: 0.8)
+    }
+}

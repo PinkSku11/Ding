@@ -183,6 +183,27 @@ enum Format {
         return "on \(weekdayFormatter.string(from: date)) at \(time(date))"
     }
 
+    /// Time left on the timer: "9:42", "1:05:42".
+    static func countdown(_ seconds: Int) -> String {
+        let s = max(0, seconds)
+        let hours = s / 3600, minutes = (s % 3600) / 60, rest = s % 60
+        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, rest) : String(format: "%d:%02d", minutes, rest)
+    }
+
+    /// A timer's length: "15 min", "1 h", "1 h 30 min" (and "20 s" for the build machine's short ones).
+    static func length(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        if total < 60 { return "\(total) s" }
+        let hours = total / 3600, minutes = (total % 3600) / 60
+        if hours == 0 { return "\(minutes) min" }
+        return minutes == 0 ? "\(hours) h" : "\(hours) h \(minutes) min"
+    }
+
+    /// A timer's name, in the menu and its notification: "15 min timer", "1 h 30 min timer".
+    static func timerName(_ seconds: TimeInterval) -> String {
+        "\(length(seconds)) timer"
+    }
+
     /// When a missed ring was: "at 07:00", "yesterday at 07:00", "on Mon at 07:00", or over a week ago
     /// "on 14 Nov at 07:00".
     static func past(_ date: Date, from now: Date = Date()) -> String {

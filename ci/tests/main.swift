@@ -357,6 +357,27 @@ do {
           "missed over a week ago: \(Format.past(longAgo, from: now))")
 }
 
+// MARK: Timer
+
+do {
+    check(Format.countdown(582) == "9:42", "time left: \(Format.countdown(582))")
+    check(Format.countdown(3942) == "1:05:42", "over an hour left: \(Format.countdown(3942))")
+    check(Format.countdown(7) == "0:07", "seconds left: \(Format.countdown(7))")
+    check(Format.countdown(-2) == "0:00", "never below zero: \(Format.countdown(-2))")
+    check(Format.timerName(15 * 60) == "15 min timer", "named as asked: \(Format.timerName(15 * 60))")
+    check(Format.length(60 * 60) == "1 h", "an hour: \(Format.length(60 * 60))")
+    check(Format.length(90 * 60) == "1 h 30 min", "an hour and a half: \(Format.length(90 * 60))")
+    check(Format.length(20) == "20 s", "the build machine's short one: \(Format.length(20))")
+    let lengths = DingTimer.lengths
+    check(zip(lengths, lengths.dropFirst()).allSatisfy { $0 < $1 } && lengths.first == 1 && lengths.last == 720,
+          "− and + go from 1 minute to 12 hours, in order")
+    check([5, 10, 15, 20, 30, 45, 60, 90].allSatisfy { lengths.contains($0) }, "− and + reach the usual lengths")
+    let rings = DingTimer(end: Date(), length: 15 * 60).alarm
+    check(rings.id == DingTimer.alarmID && rings.displayName == "15 min timer" && rings.sound == "Glass"
+          && rings.plays == 30 && rings.playUnit == .seconds && rings.volume == 0.8 && !rings.ringWhenMuted,
+          "a timer rings with Glass for 30 seconds at 80%, and not on a muted Mac")
+}
+
 // MARK: What counts as a call
 
 do {

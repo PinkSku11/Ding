@@ -13,6 +13,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private let center = UNUserNotificationCenter.current()
     private let categoryID = "ding.ring"
+    private let timerCategoryID = "ding.timer"   // like an alarm's, without "Snooze 5 min"
     private let snoozeID = "ding.snooze"
     private let keepPrefix = "ding.keep."
     private let missedPrefix = "ding.missed."
@@ -28,7 +29,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                                               actions: [snooze],
                                               intentIdentifiers: [],
                                               options: [.customDismissAction])
-        center.setNotificationCategories([category])
+        let timerCategory = UNNotificationCategory(identifier: timerCategoryID,
+                                                   actions: [],
+                                                   intentIdentifiers: [],
+                                                   options: [.customDismissAction])
+        center.setNotificationCategories([category, timerCategory])
         center.requestAuthorization(options: [.alert]) { _, _ in }
     }
 
@@ -46,7 +51,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             lines.append(Format.nextLine(next, from: ring.time))
         }
         content.body = lines.joined(separator: "\n")
-        content.categoryIdentifier = categoryID
+        content.categoryIdentifier = ring.alarm.id == DingTimer.alarmID ? timerCategoryID : categoryID
         content.userInfo = ["alarm": ring.alarm.id.uuidString]
         add(id, content)
         return id

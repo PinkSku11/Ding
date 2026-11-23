@@ -213,6 +213,270 @@ final class PlusButton: NSView {
     }
 }
 
+// MARK: - Timer: one click on a length, other lengths with − and +, or the timer that's running
+
+final class TimerSectionView: NSView {
+    static let idleHeight: CGFloat = 72
+    static let runningHeight: CGFloat = 90
+
+    private let timer: DingTimer?
+    private let onStart: (TimeInterval) -> Void
+    private let onStop: () -> Void
+    private let divider = NSView()
+    private let bubble = NSView()
+    private let presets = NSView()                             // 5 / 10 / 15 / 30 min and …
+    private let other = NSView()                               // − 20 min +  Start
+    private let otherLabel = NSTextField(labelWithString: "")
+    private let leftLabel = NSTextField(labelWithString: "")   // "9:42 left"
+    private var otherIndex: Int
+
+    init(timer: DingTimer?, onStart: @escaping (TimeInterval) -> Void, onStop: @escaping () -> Void) {
+        self.timer = timer
+        self.onStart = onStart
+        self.onStop = onStop
+        let lastOther = UserDefaults.standard.integer(forKey: "timerOtherMinutes")
+        otherIndex = DingTimer.lengths.firstIndex(of: lastOther) ?? DingTimer.lengths.firstIndex(of: 20) ?? 0
+        let width = MenuMetrics.width
+        let height = timer == nil ? TimerSectionView.idleHeight : TimerSectionView.runningHeight
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        autoresizingMask = [.width]
+
+        let title = NSTextField(labelWithString: "Timer")
+        title.font = .systemFont(ofSize: 11, weight: .semibold)
+        title.textColor = .tertiaryLabelColor
+        title.frame = NSRect(x: MenuMetrics.labelX, y: height - 20, width: 200, height: 14)
+        addSubview(title)
+
+        divider.wantsLayer = true
+        divider.frame = NSRect(x: MenuMetrics.textInset, y: 5,
+                               width: width - MenuMetrics.textInset - MenuMetrics.cardInset, height: 1)
+        divider.autoresizingMask = [.width]
+        addSubview(divider)
+
+        if let timer {
+            addRunning(timer)
+        } else {
+            addPresets()
+            addOther()
+        }
+        updateColors()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    /// The time left, while the menu is open.
+    func refresh() {
+        guard let timer else { return }
+        leftLabel.stringValue = "\(Format.countdown(Int(ceil(timer.end.timeIntervalSinceNow)))) left"
+    }
+
+    private func addPresets() {
+        presets.frame = NSRect(x: 0, y: 12, width: MenuMetrics.width, height: 36)
+        presets.autoresizingMask = [.width]
+        addSubview(presets)
+        let inset = MenuMetrics.cardInset
+        let gap: CGFloat = 6
+        let moreWidth: CGFloat = 40
+        let pillWidth = ((MenuMetrics.width - inset * 2 - moreWidth - gap * 4) / 4).rounded(.down)
+        var x = inset
+        for minutes in [5, 10, 15, 30] {
+            let pill = PillButton(title: "\(minutes) min", width: pillWidth) { [weak self] in
+                self?.onStart(TimeInterval(minutes * 60))
+            }
+            pill.setAccessibilityLabel("Start a \(minutes) min timer")
+            pill.setFrameOrigin(NSPoint(x: x, y: 4))
+            presets.addSubview(pill)
+            x += pillWidth + gap
+        }
+        let more = PillButton(title: "…", width: moreWidth) { [weak self] in self?.showOther() }
+        more.setAccessibilityLabel("Another length")
+        more.setFrameOrigin(NSPoint(x: x, y: 4))
+        presets.addSubview(more)
+    }
+
+    private func addOther() {
+        other.frame = presets.frame
+        other.autoresizingMask = [.width]
+        other.isHidden = true
+        addSubview(other)
+        let inset = MenuMetrics.cardInset
+        let minus = PillButton(symbol: "minus", width: 32) { [weak self] in self?.step(-1) }
+        minus.setAccessibilityLabel("Shorter")
+        minus.setFrameOrigin(NSPoint(x: inset, y: 4))
+        other.addSubview(minus)
+        otherLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        otherLabel.alignment = .center
+        otherLabel.frame = NSRect(x: inset + 36, y: 9, width: 92, height: 17)
+        other.addSubview(otherLabel)
+        let plus = PillButton(symbol: "plus", width: 32) { [weak self] in self?.step(1) }
+        plus.setAccessibilityLabel("Longer")
+        plus.setFrameOrigin(NSPoint(x: inset + 132, y: 4))
+        other.addSubview(plus)
+        let start = AccentButton(title: "Start") { [weak self] in self?.startOther() }
+        start.setFrameOrigin(NSPoint(x: MenuMetrics.width - inset - start.frame.width, y: 4))
+        start.autoresizingMask = [.minXMargin]
+        other.addSubview(start)
+        showLength()
+    }
+
+    private func addRunning(_ timer: DingTimer) {
+        bubble.wantsLayer = true
+        bubble.layer?.cornerRadius = 12
+        bubble.frame = NSRect(x: MenuMetrics.cardInset, y: 15,
+                              width: MenuMetrics.width - MenuMetrics.cardInset * 2, height: 48)
+        bubble.autoresizingMask = [.width]
+        addSubview(bubble)
+
+        let icon = NSImageView(frame: NSRect(x: MenuMetrics.textInset, y: 30, width: 18, height: 18))
+        icon.image = NSImage(systemSymbolName: "timer", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .regular))
+        icon.contentTintColor = .labelColor
+        addSubview(icon)
+
+        let stop = PillButton(title: "Stop", width: 56) { [weak self] in self?.onStop() }
+        stop.setAccessibilityLabel("Stop the timer")
+        stop.setFrameOrigin(NSPoint(x: MenuMetrics.width - MenuMetrics.textInset - 56, y: 25))
+        stop.autoresizingMask = [.minXMargin]
+        addSubview(stop)
+
+        let textX = MenuMetrics.labelX + 26
+        let textWidth = stop.frame.minX - 10 - textX
+        leftLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        leftLabel.frame = NSRect(x: textX, y: 40, width: textWidth, height: 17)
+        leftLabel.autoresizingMask = [.width]
+        addSubview(leftLabel)
+
+        let detail = NSTextField(labelWithString: "\(Format.timerName(timer.length)) · rings at \(Format.time(timer.end))")
+        detail.font = .systemFont(ofSize: 11)
+        detail.textColor = .secondaryLabelColor
+        detail.lineBreakMode = .byTruncatingTail
+        detail.frame = NSRect(x: textX, y: 23, width: textWidth, height: 15)
+        detail.autoresizingMask = [.width]
+        addSubview(detail)
+        refresh()
+    }
+
+    private func showOther() {
+        presets.isHidden = true
+        other.isHidden = false
+        RingLog.write("timer other")
+    }
+
+    private func step(_ by: Int) {
+        otherIndex = min(max(otherIndex + by, 0), DingTimer.lengths.count - 1)
+        showLength()
+    }
+
+    private func showLength() {
+        otherLabel.stringValue = Format.length(TimeInterval(DingTimer.lengths[otherIndex] * 60))
+    }
+
+    private func startOther() {
+        let minutes = DingTimer.lengths[otherIndex]
+        UserDefaults.standard.set(minutes, forKey: "timerOtherMinutes")   // where − and + start next time
+        onStart(TimeInterval(minutes * 60))
+    }
+
+    private func updateColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.divider.layer?.backgroundColor = NSColor.separatorColor.cgColor
+            self.bubble.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColors()
+    }
+}
+
+/// A small rounded button in the timer row: a word ("10 min", "Stop") or a symbol (− and +).
+final class PillButton: NSView {
+    private let action: () -> Void
+    private var trackingArea: NSTrackingArea?
+    private var hovering = false {
+        didSet { updateColor() }
+    }
+    private var pressed = false {
+        didSet { updateColor() }
+    }
+
+    init(title: String? = nil, symbol: String? = nil, width: CGFloat, action: @escaping () -> Void) {
+        self.action = action
+        let height: CGFloat = 28
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        wantsLayer = true
+        layer?.cornerRadius = height / 2
+
+        if let title {
+            let label = NSTextField(labelWithString: title)
+            label.font = .systemFont(ofSize: 12)
+            label.alignment = .center
+            label.sizeToFit()
+            label.frame = NSRect(x: 0, y: ((height - label.frame.height) / 2).rounded(),
+                                 width: width, height: label.frame.height)
+            addSubview(label)
+            setAccessibilityLabel(title)
+        } else if let symbol {
+            let icon = NSImageView(frame: bounds)
+            icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
+            icon.contentTintColor = .labelColor
+            icon.imageScaling = .scaleNone
+            addSubview(icon)
+        }
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        updateColor()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    private func updateColor() {
+        let alpha: CGFloat = pressed ? 0.26 : (hovering ? 0.18 : 0.09)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(alpha).cgColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColor()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let old = trackingArea { removeTrackingArea(old) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self,
+                                  userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func mouseDown(with event: NSEvent) { pressed = true }
+
+    override func mouseUp(with event: NSEvent) {
+        pressed = false
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.insetBy(dx: -3, dy: -3).contains(point) {
+            action()
+        }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        action()
+        return true
+    }
+}
+
 // MARK: - One alarm in the menu: its own bubble, with a switch on the right
 
 final class AlarmRowView: NSView {

@@ -12,6 +12,8 @@ Ding is the bell in the menu bar. Click it for your alarms, and click an alarm t
 
 When an alarm rings, click its notification or the bell to stop it, or click Snooze 5 min on the notification to hear it again five minutes later. Ding clears each notification after the ring, unless that alarm has "Keep in Notification Center" on; then its latest notification stays there.
 
+For a timer, click the bell, then 5, 10, 15 or 30 min, or … to pick another length with − and +. The time left shows next to the bell, and the menu shows when it rings, with a Stop button. When the time is up it rings like an alarm, with Glass for 30 seconds; click its notification or the bell to stop it sooner. While a timer runs, Ding keeps the Mac from going to sleep.
+
 ## Good to know
 
 - Ding rings only while it's open, so turn on Open at login if you want it there after a restart.

@@ -100,6 +100,13 @@ mkdir -p "$SUPPORT"
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 defaults write com.shriya.Ding launchedBefore -bool true
 defaults write -g NSMenuEnableActionImages -bool NO
+clear_timer() {   # no timer left running from an earlier test
+    defaults delete com.shriya.Ding timerEnd 2>/dev/null
+    defaults delete com.shriya.Ding timerLength 2>/dev/null
+    defaults delete com.shriya.Ding timerOtherMinutes 2>/dev/null
+    return 0
+}
+clear_timer
 
 shoot() {   # $1: what Ding should show, $2: screenshot name, $3: "dark" for dark mode
     pkill -x Ding 2>/dev/null
@@ -138,15 +145,98 @@ pkill -x Ding 2>/dev/null
 sleep 1
 open -n "$APP" --args -DingShow menu
 sleep 5
-screencapture -v -V 2 -x -R 930,100,72,42 "$OUT/switch.mov" >/dev/null 2>&1 &
+screencapture -v -V 2 -x -R 930,172,72,42 "$OUT/switch.mov" >/dev/null 2>&1 &
 sleep 0.6
-python3 ci/click.py click 965 120       # the first alarm's switch
+python3 ci/click.py click 965 192       # the first alarm's switch (below the timer row)
 sleep 2.6
 ls -la "$OUT/switch.mov" 2>/dev/null || echo "(no switch video)"
 screencapture -x "$OUT/switch-after.png"   # the "Next:" line and the details update while the menu stays open
 pkill -x Ding
 sleep 1
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+
+echo
+echo "== Timer: 5 min, the countdown next to the bell, the running timer in the menu, Stop, another length"
+clear_timer
+rm -f /tmp/ding-timer.log
+open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log
+sleep 5
+screencapture -x "$OUT/timer-menu.png"
+python3 ci/click.py click 715 112          # "5 min"
+sleep 1.5
+screencapture -x "$OUT/timer-menubar.png"  # the menu has closed; the time left is next to the bell
+pkill -x Ding; sleep 1
+open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log   # still running after a restart
+sleep 5
+screencapture -x "$OUT/timer-running.png"
+python3 ci/click.py click 961 121          # Stop
+sleep 1.5
+screencapture -x "$OUT/timer-stopped.png"
+pkill -x Ding; sleep 1
+open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log
+sleep 5
+python3 ci/click.py click 983 112          # "…"
+sleep 0.6
+python3 ci/click.py click 831 112; sleep 0.4   # + (20 min becomes 25)
+python3 ci/click.py click 831 112; sleep 0.4   # + (30)
+screencapture -x "$OUT/timer-other.png"
+python3 ci/click.py click 970 112          # Start
+sleep 1.5
+pkill -x Ding; sleep 1
+clear_timer
+awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-timer.log 2>/dev/null || echo "(no log)"
+python3 - /tmp/ding-timer.log <<'PY' || TEST_OK=0
+import sys
+steps = [line.split(" ", 1)[1].split(" ends ")[0].strip() for line in open(sys.argv[1])
+         if line.split(" ", 1)[1].startswith("timer ")]
+want = ["timer started 300", "timer stopped", "timer other", "timer started 1800"]
+if steps == want:
+    print("OK: 5 min started a 5-minute timer, Stop stopped it, and … with + twice started a 30-minute one")
+else:
+    print(f"FAIL: expected {want}, got {steps}")
+    sys.exit(1)
+PY
+
+echo "-- a 20-second timer rings like an alarm, and a click on the blue bell stops it"
+rm -f /tmp/ding-timer-ring.log
+open -n "$APP" --args -DingTestTimer 20 -DingDark YES -DingRingLog /tmp/ding-timer-ring.log
+sleep 6
+screencapture -x "$OUT/timer-countdown.png"
+sleep 19
+screencapture -x "$OUT/timer-ringing.png"
+python3 ci/click.py click 795 12           # the blue bell
+sleep 1.5
+pkill -x Ding; sleep 1
+clear_timer
+awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-timer-ring.log 2>/dev/null || echo "(no log)"
+python3 - /tmp/ding-timer-ring.log <<'PY' || TEST_OK=0
+import sys
+TIMER = "7D1A3E52-0000-4000-8000-00000000D1E7"
+lines = [(float(l.split(" ", 1)[0]), l.split(" ", 1)[1].strip()) for l in open(sys.argv[1]) if " " in l]
+started = [t for t, l in lines if l.startswith("timer started 20 ")]
+rang = [(t, l) for t, l in lines if l.startswith(f"ring {TIMER} ")]
+named = [l for _, l in lines if l.startswith("notification ding.") and "| 20 s timer |" in l]
+cleared = [t for t, l in lines if l.startswith(f"clear {TIMER}")]
+problems = []
+if not started:
+    problems.append("the timer didn't start")
+if len(rang) != 1:
+    problems.append(f"rang {len(rang)} times")
+elif started:
+    late = rang[0][0] - started[0] - 20
+    print(f"   rang {late:.1f} s after its 20 seconds were up: {rang[0][1]}")
+    if not -0.5 <= late <= 2:
+        problems.append(f"rang {late:.1f} s late")
+    if " sound played " not in rang[0][1] + " ":
+        problems.append("no sound")
+if not named:
+    problems.append("no notification named \"20 s timer\"")
+if not cleared or (rang and cleared[0] - rang[0][0] > 25):
+    problems.append("the click on the blue bell didn't stop it")
+if problems:
+    print("FAIL: " + "; ".join(problems)); sys.exit(1)
+print("OK: the timer rang on time with its sound and a notification named \"20 s timer\"; the blue bell stopped it")
+PY
 
 echo
 echo "== Click test: another app in front; open the editor, close it, open it again, then use it"
@@ -485,7 +575,7 @@ cat > "$SUPPORT/alarms.json" <<JSON
 JSON
 rm -f /tmp/ding-missed.log
 FREEZE=$(( WAIT + 75 ))
-open -n "$APP" --args -DingTestFreeze $FREEZE -DingRingLog /tmp/ding-missed.log
+open -n "$APP" --args -DingTestFreeze $FREEZE -DingTestTimer 20 -DingRingLog /tmp/ding-missed.log
 echo "Morning walk is due in $WAIT s; Ding stands still for $FREEZE s, as if the Mac were asleep..."
 sleep $(( FREEZE + 6 ))
 pkill -x Ding; sleep 1
@@ -500,6 +590,15 @@ if grep -q " missed $WALK " /tmp/ding-missed.log 2>/dev/null \
 else
     echo "FAIL: the missed alarm wasn't reported as expected"; TEST_OK=0
 fi
+TIMER=7D1A3E52-0000-4000-8000-00000000D1E7
+if grep -q " missed $TIMER " /tmp/ding-missed.log 2>/dev/null \
+   && grep -q " notification ding\.missed\.$TIMER | 20 s timer |  | Missed at .* while your Mac was asleep" /tmp/ding-missed.log \
+   && ! grep -q " ring $TIMER " /tmp/ding-missed.log; then
+    echo "OK: a timer that ran out while Ding stood still didn't ring late; a notification says it was missed"
+else
+    echo "FAIL: the missed timer wasn't reported as expected"; TEST_OK=0
+fi
+clear_timer
 
 rm -f "$SUPPORT/alarms.json"
 [ "$TEST_OK" = 1 ] || fail "test run"

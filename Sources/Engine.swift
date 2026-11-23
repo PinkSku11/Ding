@@ -34,6 +34,7 @@ final class Engine: NSObject {
     private var timer: Timer?
     private var due: [UUID: Date] = [:]
     private var snoozes: [UUID: Date] = [:]   // snoozed alarms and when each rings again
+    private(set) var runningTimer: DingTimer?
     private var napBlocker: NSObjectProtocol?
     private var sleepBlocker: NSObjectProtocol?
     private var ticks = 0
@@ -49,6 +50,7 @@ final class Engine: NSObject {
             reason: "Ding keeps time for your alarms")
 
         loadSnoozes()
+        loadTimer()
         recompute()
 
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
@@ -164,6 +166,46 @@ final class Engine: NSObject {
         UserDefaults.standard.set(saved, forKey: "snoozes")
     }
 
+    // MARK: Timer
+
+    /// Starts the timer: it rings `length` from now.
+    func startTimer(_ length: TimeInterval) {
+        let timer = DingTimer(end: Date().addingTimeInterval(length), length: length)
+        runningTimer = timer
+        saveTimer()
+        RingLog.write("timer started \(Int(length)) ends \(timer.end.timeIntervalSince1970)")
+        updateKeepAwake(Date())
+        onStateChange?()
+    }
+
+    func stopTimer() {
+        guard runningTimer != nil else { return }
+        runningTimer = nil
+        saveTimer()
+        RingLog.write("timer stopped")
+        updateKeepAwake(Date())
+        onStateChange?()
+    }
+
+    /// Kept in Ding's settings like snoozes, so quitting or restarting Ding doesn't lose it.
+    private func loadTimer() {
+        let defaults = UserDefaults.standard
+        let end = defaults.double(forKey: "timerEnd")
+        let length = defaults.double(forKey: "timerLength")
+        runningTimer = end > 0 && length > 0 ? DingTimer(end: Date(timeIntervalSince1970: end), length: length) : nil
+    }
+
+    private func saveTimer() {
+        let defaults = UserDefaults.standard
+        if let timer = runningTimer {
+            defaults.set(timer.end.timeIntervalSince1970, forKey: "timerEnd")
+            defaults.set(timer.length, forKey: "timerLength")
+        } else {
+            defaults.removeObject(forKey: "timerEnd")
+            defaults.removeObject(forKey: "timerLength")
+        }
+    }
+
     private func tick() {
         let now = Date()
         var rings: [Ring] = []
@@ -207,6 +249,19 @@ final class Engine: NSObject {
             saveSnoozes()
         }
 
+        if let timer = runningTimer, now >= timer.end {
+            runningTimer = nil
+            saveTimer()
+            changed = true
+            let ring = Ring(alarm: timer.alarm, time: timer.end, next: nil)
+            if now.timeIntervalSince(timer.end) <= 60 {
+                rings.append(ring)
+            } else {
+                RingLog.write("skipped \(DingTimer.alarmID.uuidString) due \(timer.end.timeIntervalSince1970)")
+                missed.append(ring)
+            }
+        }
+
         if !finished.isEmpty { AlarmStore.shared.switchOff(finished) }
         if !rings.isEmpty { Ringer.shared.enqueue(rings) }
         for ring in missed {
@@ -224,10 +279,10 @@ final class Engine: NSObject {
     }
 
     /// "Keep Mac awake for this alarm": no idle sleep while that alarm's time range is running,
-    /// or in the few minutes before it rings once.
+    /// or in the few minutes before it rings once. A running timer keeps the Mac awake too.
     private func updateKeepAwake(_ now: Date) {
         let snoozedAwake = snoozes.keys.contains { AlarmStore.shared.alarm($0)?.keepAwake == true }
-        let wanted = snoozedAwake
+        let wanted = snoozedAwake || runningTimer != nil
             || AlarmStore.shared.alarms.contains { $0.keepAwake && Schedule.wantsMacAwake($0, at: now) }
         if wanted, sleepBlocker == nil {
             sleepBlocker = ProcessInfo.processInfo.beginActivity(
