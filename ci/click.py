@@ -1,6 +1,7 @@
 """Clicks or types for the build machine's tests.
 
     python3 click.py click X Y     click at a screen point (top-left origin)
+    python3 click.py move X Y      move the pointer there without clicking
     python3 click.py type TEXT     type text into whatever has keyboard focus
     python3 click.py tripleclick X Y   triple-click, which selects all the text in a field
     python3 click.py key return    press Return (also: down, up, escape, delete, tab)
@@ -31,6 +32,10 @@ if sys.argv[1] == "click":
         cg.CGEventPost(0, cg.CGEventCreateMouseEvent(None, kind, point, 0))
         time.sleep(0.1)
     print("clicked at", point.x, point.y)
+elif sys.argv[1] == "move":
+    point = CGPoint(float(sys.argv[2]), float(sys.argv[3]))
+    cg.CGEventPost(0, cg.CGEventCreateMouseEvent(None, 5, point, 0))   # mouse moved
+    print("moved to", point.x, point.y)
 elif sys.argv[1] == "type":
     for ch in sys.argv[2]:
         buf = (ctypes.c_uint16 * 1)(ord(ch))

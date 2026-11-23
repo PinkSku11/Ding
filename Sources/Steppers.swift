@@ -163,10 +163,9 @@ struct TimeBox: NSViewRepresentable {
     @Binding var date: Date
 
     func makeNSView(context: Context) -> TimeBoxControl {
-        let box = TimeBoxControl()
+        let box = TimeBoxControl()   // shows the time the Mac's way, 24-hour or AM/PM
         box.setAccessibilityLabel(label)
         box.arrows.name = label
-        box.locale = context.environment.locale   // the 24-hour or AM/PM choice
         box.dateValue = date
         return box
     }
@@ -174,11 +173,6 @@ struct TimeBox: NSViewRepresentable {
     func updateNSView(_ box: TimeBoxControl, context: Context) {
         let binding = $date
         box.onChange = { binding.wrappedValue = $0 }
-        let locale = context.environment.locale
-        if box.locale?.identifier != locale.identifier {
-            box.locale = locale
-            box.invalidateIntrinsicContentSize()
-        }
         if Format.minute(of: box.dateValue) != Format.minute(of: date) {
             box.dateValue = date
         }

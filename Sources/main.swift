@@ -1,7 +1,7 @@
 import AppKit
 
-// Before anything shows a time: Ding's own 24-hour / AM/PM choice (see Settings.applyHourStyle).
-Settings.applyHourStyle()
+// Before anything shows a time, so times follow the Mac's own 24-hour switch (see Settings.forgetOldSettings).
+Settings.forgetOldSettings()
 
 MainActor.assumeIsolated {
     let app = NSApplication.shared

@@ -36,28 +36,6 @@ for ARCH in arm64 x86_64; do
 done
 
 echo
-echo "== Experiment: the Mac's time box on a Mac set to 24-hour time, asked for AM/PM in different ways"
-if xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SDK" \
-        -o "$WORK/timepicker" ci/experiments/timepicker.swift; then
-    defaults write -g AppleICUForce24HourTime -bool true
-    for S in components pref-launch pref-launch-components pref-late pref-late-notify; do
-        defaults delete timepicker 2>/dev/null
-        "$WORK/timepicker" "$S" "$OUT/exp-$S" &
-        EXP=$!
-        sleep 3
-        WID=$(cat "$OUT/exp-$S.wid" 2>/dev/null)
-        [ -n "$WID" ] && screencapture -x -l "$WID" "$OUT/exp-$S.png"
-        wait "$EXP"
-        cat "$OUT/exp-$S.txt" 2>/dev/null
-        rm -f "$OUT/exp-$S.wid"
-    done
-    defaults delete timepicker 2>/dev/null
-    defaults delete -g AppleICUForce24HourTime
-else
-    echo "(the experiment didn't build)"
-fi
-
-echo
 echo "== Scheduling tests"
 xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SDK" \
     -o "$WORK/schedule-tests" Sources/Models.swift Sources/Schedule.swift Sources/Microphone.swift ci/tests/main.swift || fail "building the tests"
@@ -100,13 +78,7 @@ mkdir -p "$SUPPORT"
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 defaults write com.shriya.Ding launchedBefore -bool true
 defaults write -g NSMenuEnableActionImages -bool NO
-clear_timer() {   # no timer left running from an earlier test
-    defaults delete com.shriya.Ding timerEnd 2>/dev/null
-    defaults delete com.shriya.Ding timerLength 2>/dev/null
-    defaults delete com.shriya.Ding timerOtherMinutes 2>/dev/null
-    return 0
-}
-clear_timer
+show_log() { awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' "$1" 2>/dev/null || echo "(no log)"; }
 
 shoot() {   # $1: what Ding should show, $2: screenshot name, $3: "dark" for dark mode
     pkill -x Ding 2>/dev/null
@@ -178,146 +150,15 @@ pkill -x Ding 2>/dev/null
 sleep 1
 open -n "$APP" --args -DingShow menu
 sleep 5
-screencapture -v -V 2 -x -R 930,172,72,42 "$OUT/switch.mov" >/dev/null 2>&1 &
+screencapture -v -V 2 -x -R 930,100,72,42 "$OUT/switch.mov" >/dev/null 2>&1 &
 sleep 0.6
-python3 ci/click.py click 965 192       # the first alarm's switch (below the timer row)
+python3 ci/click.py click 965 120       # the first alarm's switch
 sleep 2.6
 ls -la "$OUT/switch.mov" 2>/dev/null || echo "(no switch video)"
 screencapture -x "$OUT/switch-after.png"   # the "Next:" line and the details update while the menu stays open
 pkill -x Ding
 sleep 1
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
-
-echo
-echo "== Timer: 5 min, the countdown next to the bell, the running timer in the menu, Stop, Custom"
-front_app() { osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null; }
-show_log() { awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' "$1" 2>/dev/null || echo "(no log)"; }
-clear_timer
-rm -f /tmp/ding-timer.log
-open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log
-sleep 5
-screencapture -x "$OUT/timer-menu.png"
-python3 ci/click.py click 712 112          # "5 min"
-sleep 1.5
-screencapture -x "$OUT/timer-menubar.png"  # the menu has closed; the time left is next to the bell
-pkill -x Ding; sleep 1
-open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log   # still running after a restart
-sleep 5
-screencapture -x "$OUT/timer-running.png"
-python3 ci/click.py click 961 121          # Stop
-sleep 1.5
-screencapture -x "$OUT/timer-stopped.png"
-pkill -x Ding; sleep 1
-open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log
-sleep 5
-python3 ci/click.py click 971 112; sleep 1       # Custom
-python3 ci/click.py type "8"; sleep 0.3
-for i in 1 2 3 4; do screencapture -x -R 670,130,140,36 "$OUT/timer-caret-$i.png"; sleep 0.2; done
-python3 ci/click.py key return; sleep 1.5        # 8 minutes
-python3 ci/click.py click 795 12; sleep 1.2      # the bell
-python3 ci/click.py click 961 121; sleep 1.2     # Stop
-pkill -x Ding; sleep 1
-
-echo "-- Custom with another app in front, as when you click the bell"
-open -n "$APP" --args -DingDark YES -DingRingLog /tmp/ding-timer.log
-sleep 4
-open -a Finder; sleep 2
-echo "Front app before: $(front_app)"
-python3 ci/click.py click 795 12; sleep 1.2      # the bell
-python3 ci/click.py click 971 112; sleep 1       # Custom: a row with the minutes box opens under the lengths
-screencapture -x "$OUT/timer-custom.png"
-python3 ci/click.py type "37"; sleep 0.3
-for i in 1 2 3 4; do screencapture -x -R 670,130,140,36 "$OUT/timer-caret-front-$i.png"; sleep 0.2; done
-screencapture -x "$OUT/timer-custom-typed.png"
-python3 ci/click.py key return; sleep 1.5        # Return starts it
-CUSTOM_FRONT=$(front_app)
-echo "Front app after Return: $CUSTOM_FRONT"
-python3 ci/click.py click 795 12; sleep 1.2
-python3 ci/click.py click 961 121; sleep 1.2     # Stop
-python3 ci/click.py click 795 12; sleep 1.2
-python3 ci/click.py click 971 112; sleep 1       # Custom: 37 is there, selected
-python3 ci/click.py type "1x2"; sleep 0.6        # the x doesn't go in
-python3 ci/click.py key delete; sleep 0.3        # Delete takes the 2 out
-python3 ci/click.py type "5"; sleep 0.6
-screencapture -x "$OUT/timer-custom-typed-again.png"
-python3 ci/click.py click 965 148; sleep 1.5     # Start
-python3 ci/click.py click 795 12; sleep 1.2
-python3 ci/click.py click 961 121; sleep 1.2     # Stop
-python3 ci/click.py click 795 12; sleep 1.2
-python3 ci/click.py click 971 112; sleep 0.8     # Custom opens the row
-python3 ci/click.py click 971 112; sleep 0.8     # and a second click closes it
-screencapture -x "$OUT/timer-custom-closed.png"
-python3 ci/click.py click 712 112; sleep 1.5     # 5 min
-python3 ci/click.py click 795 12; sleep 1.2
-python3 ci/click.py click 961 121; sleep 1.2     # Stop
-pkill -x Ding; sleep 1
-clear_timer
-show_log /tmp/ding-timer.log
-python3 - /tmp/ding-timer.log "$CUSTOM_FRONT" <<'PY2' || TEST_OK=0
-import sys
-lines = [line.split(" ", 1)[1].strip() for line in open(sys.argv[1]) if " " in line]
-steps = [l.split(" ends ")[0] for l in lines
-         if l.startswith(("timer started", "timer stopped", "timer custom"))]
-want = ["timer started 300", "timer stopped",
-        "timer custom", "timer started 480", "timer stopped",
-        "timer custom", "timer started 2220", "timer stopped",
-        "timer custom", "timer started 900", "timer stopped",
-        "timer custom", "timer custom closed", "timer started 300", "timer stopped"]
-typed = [l for l in lines if l.startswith("timer typed ")]
-problems = []
-if steps != want:
-    problems.append(f"expected {want}, got {steps}")
-if any("x" in l for l in typed):
-    problems.append(f"a letter went into the box: {typed}")
-if sys.argv[2] != "Finder":
-    problems.append(f"Ding took the keyboard: the app in front is {sys.argv[2]!r}, not Finder")
-if problems:
-    print("FAIL: " + "; ".join(problems)); sys.exit(1)
-print("OK: 5 min and Stop work; Custom with 8 and Return started 8 minutes; with Finder in front, 37 and Return")
-print("    started 37, 1x2, Delete, 5 and Start started 15, a second click on Custom closed the row, and Finder kept")
-print("    the keyboard")
-PY2
-
-echo "-- a 20-second timer rings like an alarm, and a click on the blue bell stops it"
-rm -f /tmp/ding-timer-ring.log
-open -n "$APP" --args -DingTestTimer 20 -DingDark YES -DingRingLog /tmp/ding-timer-ring.log
-sleep 6
-screencapture -x "$OUT/timer-countdown.png"
-sleep 19
-screencapture -x "$OUT/timer-ringing.png"
-python3 ci/click.py click 795 12           # the blue bell
-sleep 1.5
-pkill -x Ding; sleep 1
-clear_timer
-show_log /tmp/ding-timer-ring.log
-python3 - /tmp/ding-timer-ring.log <<'PY' || TEST_OK=0
-import sys
-TIMER = "7D1A3E52-0000-4000-8000-00000000D1E7"
-lines = [(float(l.split(" ", 1)[0]), l.split(" ", 1)[1].strip()) for l in open(sys.argv[1]) if " " in l]
-started = [t for t, l in lines if l.startswith("timer started 20 ")]
-rang = [(t, l) for t, l in lines if l.startswith(f"ring {TIMER} ")]
-named = [l for _, l in lines if l.startswith("notification ding.") and "| 20 s timer |" in l]
-cleared = [t for t, l in lines if l.startswith(f"clear {TIMER}")]
-problems = []
-if not started:
-    problems.append("the timer didn't start")
-if len(rang) != 1:
-    problems.append(f"rang {len(rang)} times")
-elif started:
-    late = rang[0][0] - started[0] - 20
-    print(f"   rang {late:.1f} s after its 20 seconds were up: {rang[0][1]}")
-    if not -0.5 <= late <= 2:
-        problems.append(f"rang {late:.1f} s late")
-    if " sound played " not in rang[0][1] + " ":
-        problems.append("no sound")
-if not named:
-    problems.append("no notification named \"20 s timer\"")
-if not cleared or (rang and cleared[0] - rang[0][0] > 25):
-    problems.append("the click on the blue bell didn't stop it")
-if problems:
-    print("FAIL: " + "; ".join(problems)); sys.exit(1)
-print("OK: the timer rang on time with its sound and a notification named \"20 s timer\"; the blue bell stopped it")
-PY
 
 echo
 echo "== Click test: another app in front; open the editor, close it, open it again, then use it"
@@ -420,10 +261,11 @@ rm -f /tmp/ding-back.log
 pkill -x Ding 2>/dev/null; sleep 1
 open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-back.log
 sleep 5
-python3 ci/click.py click 760 193; sleep 2     # the first alarm: its editor opens
+python3 ci/click.py click 760 121; sleep 2     # the first alarm: its editor opens
 python3 ci/click.py key escape; sleep 2        # Escape closes the editor, and the list comes back
 screencapture -x "$OUT/back-after-escape.png"
-python3 ci/click.py click 760 193; sleep 2     # the first alarm again
+python3 ci/click.py move 760 160; sleep 0.3    # a person moves onto the alarm before clicking it
+python3 ci/click.py click 760 121; sleep 2     # the first alarm again
 screencapture -x "$OUT/back-editor-again.png"
 python3 ci/click.py key return; sleep 2        # Save, and the list comes back
 screencapture -x "$OUT/back-after-save.png"
@@ -501,11 +343,7 @@ cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 shoot editor blue-editor dark || TEST_OK=0
 shoot new blue-new dark || TEST_OK=0
 shoot menu blue-menu dark || TEST_OK=0
-defaults write com.shriya.Ding timeFormat 24
-shoot editor blue-editor-24h dark || TEST_OK=0
-shoot menu blue-menu-24h dark || TEST_OK=0
-shoot options blue-options-24h dark || TEST_OK=0
-defaults delete com.shriya.Ding timeFormat
+shoot options blue-options dark || TEST_OK=0
 
 echo
 echo "== One of your sounds deleted: the editor shows Glass, which plays instead"
@@ -588,7 +426,7 @@ python3 ci/click.py drag 850 441 760 441; sleep 2
 screencapture -x "$OUT/preview-after.png"
 pkill -x Ding; sleep 1
 echo "-- what Ding did:"
-awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-preview.log 2>/dev/null || echo "(no log)"
+show_log /tmp/ding-preview.log
 cp /tmp/ding-preview.log "$OUT/preview-log.txt" 2>/dev/null
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 VOLUME_AFTER=$(osascript -e 'output volume of (get volume settings)' 2>&1)
@@ -637,7 +475,7 @@ echo "Mac muted: $(osascript -e 'output muted of (get volume settings)' 2>&1)"
 sleep 6
 screencapture -x "$OUT/preview-note-gone.png"
 pkill -x Ding; sleep 1
-awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-note.log 2>/dev/null || echo "(no log)"
+show_log /tmp/ding-note.log
 if grep -q "preview silent-muted" /tmp/ding-note.log 2>/dev/null; then
     echo "OK: a sound tried on a muted Mac stays silent, and the note says why"
 else
@@ -650,7 +488,7 @@ open -n "$APP" --args -DingShow ring -DingRingLog /tmp/ding-silent.log
 sleep 4
 osascript -e 'set volume without output muted'
 pkill -x Ding; sleep 1
-awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-silent.log 2>/dev/null || echo "(no log)"
+show_log /tmp/ding-silent.log
 if grep -q "silent-muted" /tmp/ding-silent.log 2>/dev/null; then
     if grep -q "^[0-9.]* notification ding\.[^ ]* | Water break | No sound: the Mac is muted | " /tmp/ding-silent.log; then
         echo "OK: the notification of a silent ring says \"No sound: the Mac is muted\""
@@ -668,17 +506,32 @@ pkill -x Ding; sleep 1
 cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 
 echo
-echo "== A Mac set to 24-hour time: Ding follows it, and AM/PM can still be picked"
+echo "== The Mac's time format: Ding shows times as the Mac does, 24-hour or AM/PM"
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
+next_time() {   # $1: a log; prints the time in the first "Next:" line the list showed
+    grep -m1 " list shown | Next: " "$1" 2>/dev/null | sed -E 's/.* at ([0-9]{1,2}:[0-9]{2}.*)$/\1/'
+}
+rm -f /tmp/ding-ampm.log /tmp/ding-24h.log
+pkill -x Ding 2>/dev/null; sleep 1
+open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-ampm.log
+sleep 5
+pkill -x Ding; sleep 1
 defaults write -g AppleICUForce24HourTime -bool true
 shoot options blue-options-mac24 dark || TEST_OK=0
-shoot menu blue-menu-mac24 dark || TEST_OK=0
-shoot editor-switch blue-editor-switched dark || TEST_OK=0   # AM/PM picked while Ding runs
-echo "Ding's own setting after picking AM/PM: timeFormat=$(defaults read com.shriya.Ding timeFormat 2>/dev/null)"
-defaults write com.shriya.Ding timeFormat 12
-shoot editor blue-editor-ampm dark || TEST_OK=0
-shoot menu blue-menu-ampm dark || TEST_OK=0
-defaults delete com.shriya.Ding timeFormat
+shoot editor blue-editor-mac24 dark || TEST_OK=0
+open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-24h.log
+sleep 5
+screencapture -x "$OUT/blue-menu-mac24.png"
+pkill -x Ding; sleep 1
 defaults delete -g AppleICUForce24HourTime
+AMPM=$(next_time /tmp/ding-ampm.log); H24=$(next_time /tmp/ding-24h.log)
+echo "Next time on this Mac as it is: '$AMPM'; with the Mac's 24-hour switch on: '$H24'"
+if [[ "$AMPM" == *M ]] && [[ "$H24" =~ ^[0-9]{1,2}:[0-9]{2}$ ]]; then
+    echo "OK: times follow the Mac's format"
+else
+    echo "FAIL: times didn't follow the Mac's format"; TEST_OK=0
+fi
+cp ci/sample-alarms.json "$SUPPORT/alarms.json"
 
 echo
 echo "== Microphone: a call keeps Ding quiet, Siri listening for \"Hey Siri\" doesn't"
@@ -709,7 +562,7 @@ if xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -sdk "$SD
     pkill -x Ding; sleep 1
     echo "\"corespeechd\": $(cat /tmp/mic-siri.txt)"
     echo "\"Recorder\": $(cat /tmp/mic-call.txt)"
-    awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' "$MIC_LOG" 2>/dev/null
+    show_log "$MIC_LOG"
     FIRST=$(grep -E " preview (played|silent)" "$MIC_LOG" 2>/dev/null | sed -n 1p | awk '{ print $3 }')
     SECOND=$(grep -E " preview (played|silent)" "$MIC_LOG" 2>/dev/null | sed -n 2p | awk '{ print $3 }')
     if grep -q "^recorded [1-9]" /tmp/mic-siri.txt && grep -q "^recorded [1-9]" /tmp/mic-call.txt; then
@@ -745,11 +598,11 @@ cat > "$SUPPORT/alarms.json" <<JSON
 JSON
 rm -f /tmp/ding-missed.log
 FREEZE=$(( WAIT + 75 ))
-open -n "$APP" --args -DingTestFreeze $FREEZE -DingTestTimer 20 -DingRingLog /tmp/ding-missed.log
+open -n "$APP" --args -DingTestFreeze $FREEZE -DingRingLog /tmp/ding-missed.log
 echo "Morning walk is due in $WAIT s; Ding stands still for $FREEZE s, as if the Mac were asleep..."
 sleep $(( FREEZE + 6 ))
 pkill -x Ding; sleep 1
-awk 'NR == 1 { t0 = $1 } { printf "  %6.2f s  %s\n", $1 - t0, substr($0, index($0, " ") + 1) }' /tmp/ding-missed.log 2>/dev/null || echo "(no log)"
+show_log /tmp/ding-missed.log
 WALK=6F1C1D2E-0000-4000-8000-0000000000C1
 if grep -q " missed $WALK " /tmp/ding-missed.log 2>/dev/null \
    && grep -q " notification ding\.missed\.$WALK | Morning walk |  | Missed at .* while your Mac was asleep" /tmp/ding-missed.log \
@@ -760,16 +613,6 @@ if grep -q " missed $WALK " /tmp/ding-missed.log 2>/dev/null \
 else
     echo "FAIL: the missed alarm wasn't reported as expected"; TEST_OK=0
 fi
-TIMER=7D1A3E52-0000-4000-8000-00000000D1E7
-if grep -q " missed $TIMER " /tmp/ding-missed.log 2>/dev/null \
-   && grep -q " notification ding\.missed\.$TIMER | 20 s timer |  | Missed at .* while your Mac was asleep" /tmp/ding-missed.log \
-   && ! grep -q " ring $TIMER " /tmp/ding-missed.log; then
-    echo "OK: a timer that ran out while Ding stood still didn't ring late; a notification says it was missed"
-else
-    echo "FAIL: the missed timer wasn't reported as expected"; TEST_OK=0
-fi
-clear_timer
-
 rm -f "$SUPPORT/alarms.json"
 [ "$TEST_OK" = 1 ] || fail "test run"
 

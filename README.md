@@ -8,11 +8,11 @@ A small alarm for the Mac menu bar. Each alarm rings either repeatedly (every fe
 2. Drag Ding into your Applications folder, then open it.
 3. The first time, macOS says it can't check Ding for malware, because Ding isn't from the App Store. Click Done, go to System Settings → Privacy & Security, scroll down and click Open Anyway.
 
-Ding is the bell in the menu bar. Click it for your alarms, and click an alarm to change it or duplicate it. Right-click the bell to choose 24-hour or AM/PM times, to have Ding open at login, or to quit.
+Ding is the bell in the menu bar. Click it for your alarms, and click an alarm to change it or duplicate it; when you save, cancel or delete, the list comes back. A new alarm starts with Glass, played once at half volume. Right-click the bell to have Ding open at login, or to quit.
+
+Times show the way your Mac shows them, 24-hour or AM/PM, as set in System Settings → General → Date & Time.
 
 When an alarm rings, click its notification or the bell to stop it, or click Snooze 5 min on the notification to hear it again five minutes later. Ding clears each notification after the ring, unless that alarm has "Keep in Notification Center" on; then its latest notification stays there.
-
-For a timer, click the bell, then 5, 10, 15 or 30 min. For another length, click Custom, type the minutes (up to 999) and press Return. The time left shows next to the bell, and the menu shows when it rings, with a Stop button. When the time is up it rings like an alarm, with Glass for 30 seconds; click its notification or the bell to stop it sooner. While a timer runs, Ding keeps the Mac from going to sleep.
 
 ## Updating
 

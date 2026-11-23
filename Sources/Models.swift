@@ -49,9 +49,9 @@ struct Alarm: Codable, Identifiable, Equatable {
          days: Set<Int> = [],
          oneOffDay: Date? = nil,
          sound: String = "Glass",
-         plays: Int = 2,
+         plays: Int = 1,
          playUnit: PlayUnit = .times,
-         volume: Double = 0.8,
+         volume: Double = 0.5,
          ringWhenMuted: Bool = false,
          keepAwake: Bool = false,
          keepNotification: Bool = false) {
@@ -208,19 +208,6 @@ final class AlarmStore {
         }
     }
 
-    /// "Keep Mac awake" used to be one option in the right-click menu. It now lives in each alarm;
-    /// if it was on, switch it on for every existing alarm, once.
-    func moveKeepAwakeIntoAlarms() {
-        let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: "keepAwakeMoved") else { return }
-        defaults.set(true, forKey: "keepAwakeMoved")
-        guard defaults.bool(forKey: "keepAwake") else { return }
-        for index in alarms.indices {
-            alarms[index].keepAwake = true
-        }
-        write()
-    }
-
     private func persist() {
         write()
         onChange?()
@@ -237,103 +224,20 @@ final class AlarmStore {
 
 // MARK: - Settings
 
-enum TimeFormat: String {
-    case system                      // follow the Mac, until you pick one in the right-click menu
-    case twelveHour = "12"           // 9:00 PM
-    case twentyFourHour = "24"       // 21:00
-}
-
 enum Settings {
-    static var timeFormat: TimeFormat {
-        get { TimeFormat(rawValue: UserDefaults.standard.string(forKey: "timeFormat") ?? "") ?? .system }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: "timeFormat")
-            applyHourStyle()
-        }
-    }
-
-    /// The Mac's time boxes (in the editor) follow only the Mac's own 24-hour switch, whatever Ding asks for.
-    /// So Ding keeps its own copy of that switch, set to the choice in its right-click menu;
-    /// it applies to Ding alone. Following the Mac removes it. Also run at launch.
-    static func applyHourStyle() {
-        let defaults = UserDefaults.standard
-        switch timeFormat {
-        case .system:
-            defaults.removeObject(forKey: "AppleICUForce24HourTime")
-            defaults.removeObject(forKey: "AppleICUForce12HourTime")
-        case .twentyFourHour:
-            defaults.set(true, forKey: "AppleICUForce24HourTime")
-            defaults.set(false, forKey: "AppleICUForce12HourTime")
-        case .twelveHour:
-            defaults.set(false, forKey: "AppleICUForce24HourTime")
-            defaults.set(true, forKey: "AppleICUForce12HourTime")
-        }
-    }
-
-    /// Whether times show as 21:00 rather than 9:00 PM.
-    static var uses24Hour: Bool {
-        switch timeFormat {
-        case .twentyFourHour: return true
-        case .twelveHour: return false
-        case .system:
-            // The way the Mac itself shows a time, including the 24-hour switch in Date & Time settings.
-            let formatter = DateFormatter()
-            formatter.dateStyle = .none
-            formatter.timeStyle = .short
-            return is24Hour(pattern: formatter.dateFormat ?? "")
-        }
-    }
-
-    /// Whether a time pattern such as "HH:mm" or "h:mm a" shows a 24-hour clock.
-    static func is24Hour(pattern: String) -> Bool {
-        var quoted = false
-        for character in pattern {
-            if character == "'" { quoted.toggle(); continue }   // 'text in quotes' is printed as it is
-            if quoted { continue }
-            if character == "H" || character == "k" { return true }    // 0–23 or 1–24
-            if character == "h" || character == "K" { return false }   // 1–12 or 0–11
-        }
-        return false
-    }
-
-    /// Your locale, with the hour style you picked.
-    static var timeLocale: Locale {
-        guard timeFormat != .system else { return .autoupdatingCurrent }
-        var components = Locale.Components(locale: .current)
-        components.hourCycle = uses24Hour ? .zeroToTwentyThree : .oneToTwelve
-        return Locale(components: components)
-    }
-
     static var launchedBefore: Bool {
         get { UserDefaults.standard.bool(forKey: "launchedBefore") }
         set { UserDefaults.standard.set(newValue, forKey: "launchedBefore") }
     }
-}
 
-// MARK: - Timer
-
-/// The timer: it rings once, `length` after it was started.
-struct DingTimer: Equatable {
-    let end: Date
-    let length: TimeInterval
-
-    /// The id its rings and notifications use. A timer isn't one of your alarms.
-    static let alarmID = UUID(uuidString: "7D1A3E52-0000-4000-8000-00000000D1E7")!
-
-    /// What the Custom box keeps of what's typed: the digits, three at most (up to 999 minutes).
-    static func digits(_ typed: String) -> String {
-        String(typed.filter { $0.isASCII && $0.isWholeNumber }.prefix(3))
-    }
-
-    /// The minutes in the Custom box, 1 to 999, or nil when it's empty or 0.
-    static func minutes(_ typed: String) -> Int? {
-        guard !typed.isEmpty, digits(typed) == typed, let minutes = Int(typed), minutes >= 1 else { return nil }
-        return minutes
-    }
-
-    /// How it rings: the sound a new alarm starts with, for 30 seconds or until you stop it.
-    var alarm: Alarm {
-        Alarm(id: DingTimer.alarmID, name: Format.timerName(length), kind: .once,
-              sound: "Glass", plays: 30, playUnit: .seconds, volume: 0.8)
+    /// Settings older versions kept that Ding no longer uses: the timer, Ding's own 24-hour / AM/PM choice
+    /// (with its copy of the Mac's 24-hour switch, which would otherwise still apply to Ding alone), and the
+    /// old "Keep Mac awake" option, long since moved into each alarm. Run at launch, before any time shows.
+    static func forgetOldSettings() {
+        let defaults = UserDefaults.standard
+        for key in ["timerEnd", "timerLength", "timerOtherMinutes", "timeFormat",
+                    "AppleICUForce24HourTime", "AppleICUForce12HourTime", "keepAwake", "keepAwakeMoved"] {
+            defaults.removeObject(forKey: key)
+        }
     }
 }

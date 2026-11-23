@@ -190,7 +190,6 @@ struct EditorView: View {
             .scrollContentBackground(.hidden)
             .scrollDisabled(true)
             .scrollIndicators(.never)
-            .environment(\.locale, Settings.timeLocale)   // the time boxes follow the 24-hour / AM/PM choice
             .frame(height: formHeight)
 
             HStack(spacing: 8) {
@@ -274,7 +273,7 @@ struct EditorView: View {
     }
 
     /// Plays the sound you just picked for as long as the alarm will play it (Play sound), at its volume.
-    /// While Play sound or Volume is still 0 (a new alarm), it plays once, at half volume, so you can hear it.
+    /// While Play sound or Volume is 0, it plays once, at half volume, so you can still hear it.
     private func playSample() {
         guard !model.alarm.sound.isEmpty else {
             Ringer.shared.stopPreview(because: "None was picked")

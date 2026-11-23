@@ -111,30 +111,25 @@ enum Schedule {
 // MARK: - Words and times on screen
 
 enum Format {
-    private static var timeFormatters: [TimeFormat: DateFormatter] = [:]
+    private static var savedTimeFormatter: DateFormatter?
     private static var savedWeekdayFormatter: DateFormatter?
     private static var savedDayFormatter: DateFormatter?
 
-    /// Starts the formatters afresh, after the region, the clock or the time zone changes.
+    /// Starts the formatters afresh, after the region (with the Mac's 24-hour switch), the clock or the time zone
+    /// changes.
     static func reset() {
-        timeFormatters = [:]
+        savedTimeFormatter = nil
         savedWeekdayFormatter = nil
         savedDayFormatter = nil
     }
 
-    /// Times as the Mac shows them, or in the 24-hour / AM/PM style picked in Ding's right-click menu.
+    /// Times as the Mac shows them: "21:00" or "9:00 PM", as set in System Settings.
     private static var timeFormatter: DateFormatter {
-        let choice = Settings.timeFormat
-        if let formatter = timeFormatters[choice] { return formatter }
+        if let formatter = savedTimeFormatter { return formatter }
         let formatter = DateFormatter()
-        if choice == .system {
-            formatter.dateStyle = .none
-            formatter.timeStyle = .short
-        } else {
-            formatter.locale = Settings.timeLocale
-            formatter.setLocalizedDateFormatFromTemplate(choice == .twentyFourHour ? "HHmm" : "hmma")
-        }
-        timeFormatters[choice] = formatter
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        savedTimeFormatter = formatter
         return formatter
     }
 
@@ -181,27 +176,6 @@ enum Format {
             return "tomorrow at \(time(date))"
         }
         return "on \(weekdayFormatter.string(from: date)) at \(time(date))"
-    }
-
-    /// Time left on the timer: "9:42", "1:05:42".
-    static func countdown(_ seconds: Int) -> String {
-        let s = max(0, seconds)
-        let hours = s / 3600, minutes = (s % 3600) / 60, rest = s % 60
-        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, rest) : String(format: "%d:%02d", minutes, rest)
-    }
-
-    /// A timer's length: "15 min", "1 h", "1 h 30 min" (and "20 s" for the build machine's short ones).
-    static func length(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded())
-        if total < 60 { return "\(total) s" }
-        let hours = total / 3600, minutes = (total % 3600) / 60
-        if hours == 0 { return "\(minutes) min" }
-        return minutes == 0 ? "\(hours) h" : "\(hours) h \(minutes) min"
-    }
-
-    /// A timer's name, in the menu and its notification: "15 min timer", "1 h 30 min timer".
-    static func timerName(_ seconds: TimeInterval) -> String {
-        "\(length(seconds)) timer"
     }
 
     /// When a missed ring was: "at 07:00", "yesterday at 07:00", "on Mon at 07:00", or over a week ago

@@ -5,10 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var editor: EditorController?
     private var lastAddAction: (() -> Void)?   // the + in the most recent alarm list (used by the build machine's test)
-    private weak var timerSection: TimerSectionView?   // the timer row in the open menu, to count down in
-    private var countdownTicker: Timer?
-    private var shownCountdown = ""
-    private var reopenListOpen = false   // the list shown when Ding is opened again is on screen
+    private var reopenListOpen = false   // a list away from the bell is on screen
+    private var listComingBack: DispatchWorkItem?   // the list due back after the editor, until it shows
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Only one Ding at a time, or every alarm would ring twice. The copy you just opened wins.
@@ -35,10 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Ringer.shared.onChange = { [weak self] in self?.refreshIcon() }
         AlarmStore.shared.onChange = { Engine.shared.recompute() }
         Engine.shared.onStateChange = { [weak self] in self?.refreshIcon() }
-        AlarmStore.shared.moveKeepAwakeIntoAlarms()
         Engine.shared.start()
-        let testTimer = UserDefaults.standard.double(forKey: "DingTestTimer")   // the build machine's timer test
-        if testTimer > 0 { Engine.shared.startTimer(testTimer) }
         refreshIcon()
 
         if !Settings.launchedBefore {
@@ -81,14 +76,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let press = Timer(timeInterval: 2, repeats: false) { _ in self?.lastAddAction?() }
                     RunLoop.main.add(press, forMode: .common)
                     self?.openAlarmMenu()
-                case "editor-switch":   // the editor, then AM/PM picked as from the menu, then the editor again
-                    let first = AlarmStore.shared.alarms.first?.id
-                    self?.openEditor(first)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        self?.editor?.close()
-                        self?.use12Hour()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.openEditor(first) }
-                    }
                 case "editor-duplicate":   // the editor, then Duplicate, as a click would
                     self?.openEditor(AlarmStore.shared.alarms.first?.id)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self?.editor?.duplicate() }
@@ -132,9 +119,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The alarm list with its top left corner at `point`: next to the pointer when Ding is opened again, or
     /// where it was before the editor. `fromBell`: it was the bell's list, so the bell shows as pressed again.
     private func popUpList(at point: NSPoint, fromBell: Bool = false) {
+        cancelListComingBack()
         guard !reopenListOpen else { return }
         reopenListOpen = true
-        RingLog.write("list shown")
+        RingLog.write("list shown | \(nextText())")
         if fromBell { statusItem.button?.highlight(true) }
         buildAlarmMenu(fromBell: fromBell).popUp(positioning: nil, at: point, in: nil)
         if fromBell { statusItem.button?.highlight(false) }
@@ -148,39 +136,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alarms = AlarmStore.shared.alarms
         if Ringer.shared.isRinging {
             button.image = StatusIcon.ringing
-        } else if !alarms.isEmpty && !alarms.contains(where: { $0.isOn }) && !Engine.shared.hasSnoozes
-                    && Engine.shared.runningTimer == nil {
+        } else if !alarms.isEmpty && !alarms.contains(where: { $0.isOn }) && !Engine.shared.hasSnoozes {
             button.image = StatusIcon.bellOff
         } else {
             button.image = StatusIcon.bell
-        }
-        updateCountdown()
-    }
-
-    /// While the timer runs, the time left shows next to the bell, and in the menu while it's open.
-    private func updateCountdown() {
-        guard let button = statusItem?.button else { return }
-        let timer = Engine.shared.runningTimer
-        var text = ""
-        if let timer, !Ringer.shared.isRinging {
-            text = Format.countdown(Int(ceil(timer.end.timeIntervalSinceNow)))
-        }
-        if text != shownCountdown {
-            shownCountdown = text
-            button.font = .monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
-            button.title = text
-            button.imagePosition = text.isEmpty ? .imageOnly : .imageLeading
-        }
-        timerSection?.refresh()
-        if timer != nil {
-            if countdownTicker == nil {
-                let ticker = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.updateCountdown() }
-                RunLoop.main.add(ticker, forMode: .common)
-                countdownTicker = ticker
-            }
-        } else if let ticker = countdownTicker {
-            ticker.invalidate()
-            countdownTicker = nil
         }
     }
 
@@ -205,8 +164,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func openAlarmMenu() {
-        RingLog.write("list shown")
+        cancelListComingBack()
+        RingLog.write("list shown | \(nextText())")
         openMenu(buildAlarmMenu(fromBell: true))
+    }
+
+    /// Another list or the editor opened first (a quick click on the bell after Save): the list doesn't come back too.
+    private func cancelListComingBack() {
+        listComingBack?.cancel()
+        listComingBack = nil
     }
 
     /// Where an alarm list was, to show it there again when you're done in the editor.
@@ -257,7 +223,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alarms = sortedAlarms()
 
         if alarms.isEmpty {
-            menu.addItem(timerItem(in: menu))   // the timer works without any alarm
             let item = NSMenuItem()
             item.view = EmptyStateView { [weak self, weak menu] in
                 let anchor = menu?.items.first?.view?.window?.frame
@@ -271,7 +236,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let headerView = NextHeaderView(text: nextText())
             header.view = headerView
             menu.addItem(header)
-            menu.addItem(timerItem(in: menu))
             let alarmsHeader = NSMenuItem()
             let addAction = { [weak self, weak menu] in
                 let anchor = menu?.items.first?.view?.window?.frame   // where the list is on screen
@@ -310,38 +274,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return menu
     }
 
-    /// The timer row. Picking a length (or typing one under Custom) starts the timer and closes the menu,
-    /// so the countdown shows next to the bell; Stop stops it.
-    private func timerItem(in menu: NSMenu) -> NSMenuItem {
-        let item = NSMenuItem()
-        let view = TimerSectionView(
-            timer: Engine.shared.runningTimer,
-            onStart: { [weak menu] length in
-                Engine.shared.startTimer(length)
-                menu?.cancelTracking()
-            },
-            onStop: { [weak menu] in
-                Engine.shared.stopTimer()
-                menu?.cancelTracking()
-            })
-        item.view = view
-        timerSection = view
-        return item
-    }
-
+    /// Times follow the Mac's own format (System Settings → General → Date & Time), so there's nothing to pick here.
     private func addOptions(to menu: NSMenu) {
-        menu.addItem(NSMenuItem.sectionHeader(title: "Time format"))
-        let uses24Hour = Settings.uses24Hour
-        let twentyFour = NSMenuItem(title: "24-hour", action: #selector(use24Hour), keyEquivalent: "")
-        twentyFour.target = self
-        twentyFour.state = uses24Hour ? .on : .off
-        menu.addItem(twentyFour)
-        let twelve = NSMenuItem(title: "AM/PM", action: #selector(use12Hour), keyEquivalent: "")
-        twelve.target = self
-        twelve.state = uses24Hour ? .off : .on
-        menu.addItem(twelve)
-        menu.addItem(.separator())
-
         let login = NSMenuItem(title: "Open at login", action: #selector(toggleOpenAtLogin), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -367,18 +301,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let soonest = Engine.shared.soonest() else { return "All alarms are off" }
         let snoozed = soonest.snoozed ? " (snoozed)" : ""
         return "Next: \(soonest.alarm.displayName) \(Format.when(soonest.time))\(snoozed)"
-    }
-
-    @objc private func use24Hour() {
-        Settings.timeFormat = .twentyFourHour
-        Format.reset()
-        Engine.shared.recompute()
-    }
-
-    @objc private func use12Hour() {
-        Settings.timeFormat = .twelveHour
-        Format.reset()
-        Engine.shared.recompute()
     }
 
     @objc private func toggleOpenAtLogin() {
@@ -423,6 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Editor
 
     private func openEditor(_ id: UUID?, anchor: NSRect? = nil, backTo list: ListPlace? = nil) {
+        cancelListComingBack()
         editor?.close(restoreFocus: false)
         let alarm: Alarm
         let isNew: Bool
@@ -430,9 +353,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alarm = existing
             isNew = false
         } else {
-            // A new alarm starts blank: no name, no sound, times at 00:00, numbers and volume at 0.
-            alarm = Alarm(name: "", kind: .once, fromMinute: 0, untilMinute: 0, every: 0,
-                          timeMinute: 0, days: [], sound: "", plays: 0, volume: 0, ringWhenMuted: false)
+            // A new alarm: no name yet, times at 00:00, no interval, and Glass played once at half volume.
+            alarm = Alarm(name: "", kind: .once, fromMinute: 0, untilMinute: 0, every: 0, timeMinute: 0, days: [],
+                          sound: "Glass", plays: 1, playUnit: .times, volume: 0.5, ringWhenMuted: false)
             isNew = true
         }
         let controller = EditorController(alarm: alarm, isNew: isNew)
@@ -445,9 +368,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // A moment later, so the key or click that closed the editor is over before the list opens.
             guard done, let list else { return }
             RingLog.write("editor done, back to the list")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                self.popUpList(at: list.topLeft, fromBell: list.fromBell)
-            }
+            let back = DispatchWorkItem { [weak self] in self?.popUpList(at: list.topLeft, fromBell: list.fromBell) }
+            self.listComingBack = back
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: back)
         }
         editor = controller
         controller.show(anchor: anchor, below: statusItem.button)

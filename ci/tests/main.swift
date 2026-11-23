@@ -259,36 +259,41 @@ do {
     check(Format.when(inThreeDays, from: now).hasPrefix("on "), "when later: \(Format.when(inThreeDays, from: now))")
 }
 
-// MARK: 24-hour or AM/PM, as picked in the right-click menu
+// MARK: Times the Mac's way
 
 do {
-    Settings.timeFormat = .twentyFourHour
-    check(Format.time(minute: 13 * 60 + 5) == "13:05", "24-hour: \(Format.time(minute: 13 * 60 + 5))")
-    check(Format.time(minute: 9 * 60) == "09:00", "24-hour morning: \(Format.time(minute: 9 * 60))")
-    Settings.timeFormat = .twelveHour
-    let afternoon = Format.time(minute: 13 * 60 + 5)
-    check(afternoon.hasPrefix("1:05") && afternoon.uppercased().hasSuffix("PM"), "AM/PM: \(afternoon)")
-    check(Format.subtitle(once(21 * 60, days: everyDay)).uppercased().contains("PM"), "AM/PM in the menu details")
-    Settings.timeFormat = .system
-
-    // Following the Mac: read from the way it writes a time.
-    check(Settings.is24Hour(pattern: "HH:mm"), "HH:mm is 24-hour")
-    check(Settings.is24Hour(pattern: "H.mm"), "H.mm is 24-hour")
-    check(Settings.is24Hour(pattern: "kk:mm"), "kk:mm is 24-hour")
-    check(!Settings.is24Hour(pattern: "h:mm a"), "h:mm a is AM/PM")
-    check(!Settings.is24Hour(pattern: "a h:mm"), "a h:mm (Korean style) is AM/PM")
-    check(!Settings.is24Hour(pattern: "Bh:mm"), "Bh:mm (day periods) is AM/PM")
-    check(!Settings.is24Hour(pattern: "K:mm a"), "K:mm a is AM/PM")
-    check(Settings.is24Hour(pattern: "'h'HH:mm"), "a quoted h doesn't count")
-    check(Settings.is24Hour(pattern: "HH 'h' mm"), "HH 'h' mm is 24-hour")
-
-    // After the region or time zone changes, the formatters start afresh and still work.
+    let mac = DateFormatter()
+    mac.dateStyle = .none
+    mac.timeStyle = .short
+    let afternoon = Format.date(minute: 13 * 60 + 5)
+    check(Format.time(minute: 13 * 60 + 5) == mac.string(from: afternoon),
+          "times follow the Mac's own format: \(Format.time(minute: 13 * 60 + 5))")
+    // After the region, the 24-hour switch or the time zone changes, the formatters start afresh and still work.
     Format.reset()
-    Settings.timeFormat = .twentyFourHour
-    check(Format.time(minute: 13 * 60 + 5) == "13:05", "24-hour after a reset: \(Format.time(minute: 13 * 60 + 5))")
-    Format.reset()
-    Settings.timeFormat = .system
-    check(!Format.time(minute: 13 * 60 + 5).isEmpty, "the Mac's own format after a reset")
+    check(Format.time(minute: 13 * 60 + 5) == mac.string(from: afternoon), "the Mac's own format after a reset")
+}
+
+// MARK: Settings older versions left behind are cleared
+
+do {
+    let defaults = UserDefaults.standard
+    let old = ["timerEnd", "timerLength", "timerOtherMinutes", "timeFormat",
+               "AppleICUForce24HourTime", "AppleICUForce12HourTime", "keepAwake", "keepAwakeMoved"]
+    for key in old { defaults.set("left by an older Ding", forKey: key) }   // a value the Mac itself never has
+    defaults.set(true, forKey: "launchedBefore")
+    Settings.forgetOldSettings()
+    check(old.allSatisfy { defaults.string(forKey: $0) != "left by an older Ding" },
+          "the timer's, the time format's and the old Keep awake settings go")
+    check(defaults.bool(forKey: "launchedBefore"), "settings still in use stay")
+    defaults.removeObject(forKey: "launchedBefore")
+}
+
+// MARK: A new alarm
+
+do {
+    let fresh = Alarm()
+    check(fresh.sound == "Glass" && fresh.plays == 1 && fresh.playUnit == .times && fresh.volume == 0.5,
+          "a new alarm plays Glass once at half volume")
 }
 
 // MARK: Saved alarms from older versions still load
@@ -355,31 +360,6 @@ do {
     let longAgo = at(india, 2026, 11, 14, 7)
     check(Format.past(longAgo, from: now) == "on \(day.string(from: longAgo)) at \(Format.time(longAgo))",
           "missed over a week ago: \(Format.past(longAgo, from: now))")
-}
-
-// MARK: Timer
-
-do {
-    check(Format.countdown(582) == "9:42", "time left: \(Format.countdown(582))")
-    check(Format.countdown(3942) == "1:05:42", "over an hour left: \(Format.countdown(3942))")
-    check(Format.countdown(7) == "0:07", "seconds left: \(Format.countdown(7))")
-    check(Format.countdown(-2) == "0:00", "never below zero: \(Format.countdown(-2))")
-    check(Format.timerName(15 * 60) == "15 min timer", "named as asked: \(Format.timerName(15 * 60))")
-    check(Format.length(60 * 60) == "1 h", "an hour: \(Format.length(60 * 60))")
-    check(Format.length(90 * 60) == "1 h 30 min", "an hour and a half: \(Format.length(90 * 60))")
-    check(Format.length(20) == "20 s", "the build machine's short one: \(Format.length(20))")
-    check(DingTimer.digits("37") == "37" && DingTimer.digits("1x2") == "12" && DingTimer.digits("1234") == "123"
-          && DingTimer.digits(" 4 5") == "45" && DingTimer.digits("٣") == "" && DingTimer.digits("") == "",
-          "the Custom box keeps digits only, three at most: \(DingTimer.digits("1x2")), \(DingTimer.digits("1234"))")
-    check(DingTimer.minutes("37") == 37 && DingTimer.minutes("999") == 999 && DingTimer.minutes("007") == 7
-          && DingTimer.minutes("1") == 1, "typed minutes: \(String(describing: DingTimer.minutes("37")))")
-    check(DingTimer.minutes("") == nil && DingTimer.minutes("0") == nil && DingTimer.minutes("000") == nil
-          && DingTimer.minutes("1000") == nil && DingTimer.minutes("1x") == nil,
-          "empty, 0 and anything but up to three digits isn't a length")
-    let rings = DingTimer(end: Date(), length: 15 * 60).alarm
-    check(rings.id == DingTimer.alarmID && rings.displayName == "15 min timer" && rings.sound == "Glass"
-          && rings.plays == 30 && rings.playUnit == .seconds && rings.volume == 0.8 && !rings.ringWhenMuted,
-          "a timer rings with Glass for 30 seconds at 80%, and not on a muted Mac")
 }
 
 // MARK: What counts as a call
