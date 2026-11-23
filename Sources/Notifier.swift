@@ -91,6 +91,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let center = self.center
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
             center.removeDeliveredNotifications(withIdentifiers: [id])
+            RingLog.write("removed \(id)")
         }
     }
 

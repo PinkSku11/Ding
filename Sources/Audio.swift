@@ -296,7 +296,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         cancelPending()
         player?.stop()
         player = nil
-        finishNotification(after: 30)   // time to open its Options menu and pick a snooze
+        finishNotification(after: 15)   // time to open its Options menu and pick a snooze
         current = nil
         playNext()
     }
@@ -308,7 +308,7 @@ final class Ringer: NSObject, AVAudioPlayerDelegate {
         if ring.alarm.keepNotification {
             RingLog.write("keep \(ring.alarm.id.uuidString)")
         } else {
-            RingLog.write("clear \(ring.alarm.id.uuidString)")
+            RingLog.write("clear \(ring.alarm.id.uuidString) \(id)")
             Notifier.shared.remove(id, after: seconds)
         }
     }

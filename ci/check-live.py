@@ -8,6 +8,7 @@ names = {A: "Every minute", B: "One-off", C: "Same minute", D: "Switched off", E
          G: "After a snooze"}
 
 rings, offs, skipped, busy, snoozes, kept, cleared = {}, set(), [], {}, {}, set(), set()
+cleared_at, removed_at = {}, {}   # notification id: when Ding let it go, and when it took it away
 for line in open(log_path):
     parts = line.split()
     if len(parts) < 3:
@@ -25,8 +26,12 @@ for line in open(log_path):
         snoozes[alarm] = int(parts[4]) if len(parts) > 4 and parts[3] == "for" else None
     elif kind == "keep":
         kept.add(alarm)
-    elif kind == "clear":
+    elif kind == "clear":   # clear ALARM NOTIFICATION
         cleared.add(alarm)
+        if len(parts) > 3:
+            cleared_at[parts[3]] = stamp
+    elif kind == "removed":   # removed NOTIFICATION
+        removed_at[alarm] = stamp
 
 problems = []
 
@@ -85,6 +90,11 @@ if kept != {C}:
     problems.append(f"kept notifications for {[names.get(a, a) for a in kept]}, expected only {names[C]}")
 if C in cleared or not {A, B, E, F} <= cleared:
     problems.append(f"cleared notifications for {[names.get(a, a) for a in cleared]}")
+# A ring's notification goes 15 seconds after its sound ends, or at once when the ring is stopped or snoozed.
+gaps = sorted(round(removed_at[n] - cleared_at[n], 1) for n in removed_at if n in cleared_at)
+print(f"  Seconds each notification stayed after its ring: {gaps}")
+if not any(14.5 <= g <= 16 for g in gaps) or any(not (g <= 1 or 14.5 <= g <= 16) for g in gaps):
+    problems.append(f"notifications should go 15 s after the sound (at once if stopped); they went after {gaps}")
 if B not in offs:
     problems.append("the one-off alarm didn't switch itself off")
 saved = {a["id"]: a for a in json.load(open(alarms_path))}
