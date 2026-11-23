@@ -63,6 +63,7 @@ final class StepArrows: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let up = convert(event.locationInWindow, from: nil).y < bounds.midY
+        logPosition("clicked")   // the build machine checks the arrows stay put
         held = up
         needsDisplay = true
         onStep?(up)
@@ -110,14 +111,18 @@ final class StepArrows: NSView {
         return true
     }
 
-    /// The build machine's clicks: where each box's arrows are on screen, measured from the top left.
+    /// For the build machine: where these arrows are on screen, measured from the top left.
+    private func logPosition(_ what: String) {
+        guard let window else { return }
+        let rect = window.convertToScreen(convert(bounds, to: nil))
+        let top = (NSScreen.screens.first?.frame.maxY ?? rect.maxY) - rect.maxY
+        let label = name.replacingOccurrences(of: " ", with: "_")
+        RingLog.write(String(format: "%@ %@ %.0f %.0f %.0f %.0f", what, label, rect.minX, top, rect.width, rect.height))
+    }
+
+    /// The build machine's clicks: where each box's arrows are.
     static func logPositions(in view: NSView) {
-        if let arrows = view as? StepArrows, let window = arrows.window {
-            let rect = window.convertToScreen(arrows.convert(arrows.bounds, to: nil))
-            let top = (NSScreen.screens.first?.frame.maxY ?? rect.maxY) - rect.maxY
-            let name = arrows.name.replacingOccurrences(of: " ", with: "_")
-            RingLog.write(String(format: "arrows %@ %.0f %.0f %.0f %.0f", name, rect.minX, top, rect.width, rect.height))
-        }
+        (view as? StepArrows)?.logPosition("arrows")
         view.subviews.forEach { logPositions(in: $0) }
     }
 }

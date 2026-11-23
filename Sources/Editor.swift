@@ -54,6 +54,16 @@ final class EditorModel: ObservableObject {
 
 // MARK: - The "New alarm" / "Edit alarm" window
 
+/// The unit menus next to Every and Play sound always take the same room, whatever they say ("time" or "times",
+/// "minute" or "minutes"), so the number boxes beside them never move, and line up with each other.
+private let unitMenuWidth: CGFloat = {
+    let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+    let widest = ["minutes", "hours", "times", "seconds"]
+        .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+        .max() ?? 52
+    return ceil(widest) + 32   // the menu's arrows and the room around them
+}()
+
 struct EditorView: View {
     @ObservedObject var model: EditorModel
     let onSave: () -> Void
@@ -101,6 +111,7 @@ struct EditorView: View {
                                 .labelsHidden()
                                 .fixedSize()
                                 .padding(.trailing, -3)   // line the arrows up with the controls above and below
+                                .frame(width: unitMenuWidth, alignment: .trailing)
                             }
                         }
                     } else if model.kind == .once {
@@ -157,6 +168,7 @@ struct EditorView: View {
                             .labelsHidden()
                             .fixedSize()
                             .padding(.trailing, -3)
+                            .frame(width: unitMenuWidth, alignment: .trailing)
                         }
                     }
 

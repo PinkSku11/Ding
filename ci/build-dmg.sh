@@ -221,7 +221,9 @@ python3 ci/click.py click $(arrow From up); sleep 0.5          # 9:00 becomes 10
 python3 ci/click.py click $(arrow Until down); sleep 0.5       # 23:00 becomes 22:00
 python3 ci/click.py click $(arrow Every up); sleep 0.4         # 15 becomes 16
 python3 ci/click.py click $(arrow Every up); sleep 0.4         # and 17
-python3 ci/click.py click $(arrow Play_sound down); sleep 0.5  # 2 becomes 1
+python3 ci/click.py click $(arrow Play_sound down); sleep 0.5  # 2 becomes 1: "time"
+python3 ci/click.py click $(arrow Play_sound up); sleep 0.5    # 2 again: "times", and the box mustn't move
+python3 ci/click.py click $(arrow Play_sound up); sleep 0.5    # 3
 screencapture -x "$OUT/arrows-after.png"
 python3 ci/click.py key return; sleep 1.5                      # Return saves
 pkill -x Ding 2>/dev/null; sleep 1
@@ -230,10 +232,23 @@ import json, sys
 alarm = next(a for a in json.load(open(sys.argv[1])) if a["name"] == "Water break")
 got = (alarm["fromMinute"], alarm["untilMinute"], alarm["every"], alarm["plays"])
 print(f"After the arrows: from {got[0]}, until {got[1]}, every {got[2]}, plays {got[3]}")
-if got != (600, 1320, 17, 1):
-    print("ARROWS TEST PROBLEM: expected from 600 (10:00), until 1320 (22:00), every 17 and plays 1")
+if got != (600, 1320, 17, 3):
+    print("ARROWS TEST PROBLEM: expected from 600 (10:00), until 1320 (22:00), every 17 and plays 3")
     sys.exit(1)
 print("OK: the arrows moved the hours and the numbers by one")
+PY
+python3 - /tmp/ding-arrows.log <<'PY' || TEST_OK=0
+import sys
+places = {}
+for line in open(sys.argv[1]):
+    words = line.split()
+    if len(words) >= 7 and words[1] in ("arrows", "clicked"):
+        places.setdefault(words[2], set()).add(tuple(words[3:7]))
+moved = {name: sorted(spots) for name, spots in places.items() if len(spots) > 1}
+print("Where the arrows were each time:", {name: sorted(spots) for name, spots in places.items()})
+if moved:
+    print(f"FAIL: arrows moved while being clicked: {moved}"); sys.exit(1)
+print("OK: no box moved, even when 'time' became 'times'")
 PY
 rm -f /tmp/ding-arrows.log
 open -n "$APP" --args -DingShow editor-arrows -DingDark YES -DingRingLog /tmp/ding-arrows.log
