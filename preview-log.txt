@@ -1,0 +1,77 @@
+1795458045.350892 picked Glass (was Glass)
+1795458045.430942 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+1795458045.432123 volume saved 0.30 muted false
+1795458045.49574 preview played sound Glass volume 0.80 plays 2 times
+1795458048.87919 player finished ok after 3.38s 
+1795458048.880199 preview stopped (it ended) after 3.38s
+1795458048.884279 volume restored 0.30
+1795458049.141685 picked Hero (was Glass)
+1795458049.150749 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+1795458049.1518168 volume saved 0.30 muted false
+1795458049.1796532 preview played sound Hero volume 0.80 plays 2 times
+1795458051.374988 player finished ok after 2.20s 
+1795458051.375395 preview stopped (it ended) after 2.20s
+1795458051.3771582 volume restored 0.30
+1795458053.442565 picked Morse (was Hero)
+1795458053.45157 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+1795458053.453047 volume saved 0.30 muted false
+1795458053.497299 preview played sound Morse volume 0.80 plays 2 times
+1795458054.9840999 player finished ok after 1.49s 
+1795458054.9845629 preview stopped (it ended) after 1.49s
+1795458054.9862108 volume restored 0.30
+1795458055.735681 picked Ping (was Morse)
+1795458055.746046 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+1795458055.7469401 volume saved 0.30 muted false
+1795458055.769242 preview played sound Ping volume 0.80 plays 2 times
+1795458058.68228 picked Pop (was Ping)
+1795458058.682893 preview stopped (a new one started) after 2.91s
+1795458058.702671 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+1795458058.702959 volume kept 0.30
+1795458058.7264829 preview played sound Pop volume 0.80 plays 2 times
+1795458061.179813 picked Purr (was Pop)
+1795458061.1806111 preview stopped (a new one started) after 2.45s
+1795458061.195396 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+1795458061.195746 volume kept 0.30
+1795458061.22199 preview played sound Purr volume 0.80 plays 2 times
+1795458062.8218741 player finished ok after 1.60s 
+1795458062.8223991 preview stopped (it ended) after 1.60s
+1795458062.8245711 volume restored 0.30
+1795458063.347141 picked Sosumi (was Purr)
+1795458063.356484 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+1795458063.3579779 volume saved 0.30 muted false
+1795458063.3885741 preview played sound Sosumi volume 0.80 plays 2 times
+1795458065.706038 slider pressed at 0.80
+1795458066.543198 player finished ok after 3.15s 
+1795458066.543597 preview stopped (it ended) after 3.16s
+1795458066.54494 volume restored 0.30
+1795458066.9282742 slider let go at 0.22
+1795458066.938354 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.22105263
+1795458066.939367 volume saved 0.30 muted false
+1795458066.9605222 preview played sound Sosumi volume 0.22 plays 1 times
+1795458068.579578 player finished ok after 1.62s 
+1795458068.57989 preview stopped (it ended) after 1.62s
+1795458068.5819159 volume restored 0.30
+1795458069.323227 slider pressed at 0.22
+1795458070.255817 slider let go at 0.64
+1795458070.263794 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.6421053
+1795458070.265057 volume saved 0.30 muted false
+1795458070.288474 preview played sound Sosumi volume 0.64 plays 1 times
+1795458071.910325 player finished ok after 1.62s 
+1795458071.910799 preview stopped (it ended) after 1.62s
+1795458071.912699 volume restored 0.30
+1795458072.4670901 slider pressed at 0.64
+1795458072.574517 slider let go at 0.49
+1795458072.578167 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.49473685
+1795458072.5786881 volume saved 0.30 muted false
+1795458072.5909019 preview played sound Sosumi volume 0.49 plays 1 times
+1795458074.216347 player finished ok after 1.63s 
+1795458074.2169662 preview stopped (it ended) after 1.63s
+1795458074.223069 volume restored 0.30
+1795458075.086582 slider pressed at 0.49
+1795458076.169248 slider let go at 0.02
+1795458076.175692 sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.021052632
+1795458076.1763458 volume saved 0.30 muted false
+1795458076.195393 preview played sound Sosumi volume 0.02 plays 1 times
+1795458077.8207889 player finished ok after 1.63s 
+1795458077.821453 preview stopped (it ended) after 1.63s
+1795458077.825059 volume restored 0.30

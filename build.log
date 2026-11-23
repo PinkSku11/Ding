@@ -1,0 +1,408 @@
+== Machine
+ProductName:		macOS
+ProductVersion:		26.7.2
+BuildVersion:		25G332
+Xcode 26.6
+Build version 17F113
+SDK 26.5
+swift-driver version: 1.148.6 Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+
+== Compiling for arm64
+
+== Compiling for x86_64
+
+== Scheduling tests
+118 of 118 checks passed
+
+== Putting Ding.app together
+/Users/runner/work/Ding/Ding/src/.ci-work/Ding.app/Contents/Info.plist: OK
+/Users/runner/work/Ding/Ding/src/.ci-work/Ding.app: replacing existing signature
+/Users/runner/work/Ding/Ding/src/.ci-work/Ding.app: valid on disk
+/Users/runner/work/Ding/Ding/src/.ci-work/Ding.app: satisfies its Designated Requirement
+Architectures in the fat file: /Users/runner/work/Ding/Ding/src/.ci-work/Ding.app/Contents/MacOS/Ding are: x86_64 arm64 
+2.4M	/Users/runner/work/Ding/Ding/src/.ci-work/Ding.app
+
+== Test run, with screenshots
+OK: menu
+OK: editor
+OK: new-alarm
+OK: new-from-menu
+OK: menu-light
+OK: options
+
+== Opening Ding again while it runs (as a click on its notification does): macOS gets its answer at once,
+   and the alarm list shows, without the options
+The build before this one: answered after 0.0 s (exit 0) 
+This build: answered after 0.1 s (exit 0) 
+pressed escape
+OK: opening Ding again is answered at once, and the list still shows
+
+== Switch test: film the menu while an alarm is switched off
+clicked at 965.0 120.0
+-rw-r--r--  1 runner  staff  6887 Nov 23 18:09 /Users/runner/work/Ding/Ding/src/out/switch.mov
+
+== Click test: another app in front; open the editor, close it, open it again, then use it
+Front app while the editor is open: Finder
+triple-clicked at 960.0 101.0
+typed 'Morning stretch'
+clicked at 958.0 144.0
+pressed return
+Saved by typing and pressing Return: name 'Morning stretch', rings once
+
+== Arrows in the editor: From, Until, Every and Play sound; then typing, Tab and Return
+1795457422.2942429 arrows From 969 176 13 22
+1795457422.2966418 arrows Until 969 216 13 22
+1795457422.296997 arrows Every 879 257 13 22
+1795457422.297349 arrows Play_sound 879 389 13 22
+clicked at 975.0 182.0
+clicked at 975.0 232.0
+clicked at 885.0 263.0
+clicked at 885.0 263.0
+clicked at 885.0 405.0
+clicked at 885.0 395.0
+clicked at 885.0 395.0
+pressed return
+After the arrows: from 600, until 1320, every 17, plays 3
+OK: the arrows moved the hours and the numbers by one
+Where the arrows were each time: {'From': [('969', '176', '13', '22')], 'Until': [('969', '216', '13', '22')], 'Every': [('879', '257', '13', '22')], 'Play_sound': [('879', '389', '13', '22')]}
+OK: no box moved, even when 'time' became 'times'
+triple-clicked at 859.0 268.0
+typed '2x0'
+pressed tab
+typed '5'
+pressed up
+pressed return
+After typing: every 20, plays 6
+OK: typing, Tab to the next box and the up arrow key work
+-- a time typed into From, then the minutes stepped with the up arrow key and the arrows
+triple-clicked at 949.0 187.0
+typed '7:45'
+pressed up
+clicked at 975.0 182.0
+pressed tab
+-- the pointer over the arrows and over the text
+moved to 885.0 263.0
+moved to 859.0 268.0
+moved to 975.0 222.0
+pressed return
+After typing a time: from 467, until 1320
+OK: a typed time counts, and with the cursor in the minutes the key and the arrows change the minutes
+
+== Done in the editor opened from the list: the list comes back
+clicked at 760.0 121.0
+pressed escape
+moved to 760.0 160.0
+clicked at 760.0 121.0
+pressed return
+pressed escape
+    0.00 s  list shown | Next: Water break at 6:15 PM
+    6.35 s  editor done, back to the list
+    6.61 s  list shown | Next: Water break at 6:15 PM
+   12.36 s  editor done, back to the list
+   12.63 s  list shown | Next: Water break at 6:15 PM
+OK: after Escape and after Save, the list came back
+OK: empty
+
+== Ring test: an alarm set two minutes ahead should ring on time
+Alarm due at minute 1093 of the day; waiting...
+OK: ringing
+
+== Live test: real alarms over the next few minutes
+First ring at 1795457640, waiting 374 s
+Output and volume for the first ring: to Apple_Virtual_Sound_Device worn false level 0.3
+  Every minute  due +0 min, started  0.9 s after, sound played
+  Every minute  due +1 min, started  0.7 s after, sound played
+  Every minute  due +2 min, started  0.8 s after, sound played
+  Every minute  due +3 min, started  0.9 s after, sound played
+  Every minute  due +4 min, started  0.8 s after, sound played
+  One-off       due +1 min, started  2.5 s after, sound played
+  The one-off was snoozed with the Snooze 15 min button: snooze for 15 min
+  Snoozed       due 64 s after its first ring, started  0.8 s after, sound played
+  Same minute   due +2 min, started  2.6 s after, sound played
+  After a snooze due +1 min, started  4.1 s after, sound played
+  Silent        due +3 min, started  2.6 s after, sound silent
+  Long sound    due +4 min, started  2.6 s after, sound played
+  Long sound    due +5 min while still playing: let the first finish
+  Notifications left in Notification Center: ['Same minute']; cleared: ['After a snooze', 'Every minute', 'Long sound', 'One-off', 'Silent']
+  Seconds each notification stayed after its ring: [0.0, 15.0, 15.0, 15.0, 15.1, 15.1, 15.1, 15.1, 15.7]
+Live test: every ring came on time, the one-off switched itself off, the switched-off alarm stayed quiet,
+a sound longer than its gap finished without piling up rings, and a snoozed alarm rang again on time.
+
+== Over a blue desktop: the editor and the menu
+wrote /tmp/ding-blue.png
+OK: blue-editor
+OK: blue-new
+OK: blue-menu
+OK: blue-options
+
+== One of your sounds deleted: the editor shows Glass, which plays instead
+OK: blue-editor-missing-sound
+
+== A snoozed alarm that's off (a one-time alarm switches itself off): the Next line shows it
+OK: blue-menu-snoozed
+
+== Duplicate: the editor becomes an unsaved copy named "Water break copy"; Return saves it
+clicked at 560.0 55.0
+pressed return
+After Duplicate and Return: 5 alarms (was 4), copies named 'Water break copy': 1
+
+== Preview experiment: pick sounds and move the volume like a person would, and log every step
+-- the same sound again (Glass, already picked)
+clicked at 973.0 358.0
+clicked at 973.0 358.0
+-- the next sound, then quickly the ones after it
+clicked at 973.0 358.0
+pressed down
+pressed return
+clicked at 973.0 358.0
+pressed down
+pressed return
+clicked at 973.0 358.0
+pressed down
+pressed return
+clicked at 973.0 358.0
+pressed down
+pressed return
+clicked at 973.0 358.0
+pressed down
+pressed return
+clicked at 973.0 358.0
+pressed down
+pressed return
+-- the volume slider: drags, and a click on the bar
+dragged from 910.0 441.0 to 800.0 441.0
+dragged from 800.0 441.0 to 880.0 441.0
+clicked at 850.0 441.0
+dragged from 850.0 441.0 to 760.0 441.0
+-- what Ding did:
+    0.00 s  picked Glass (was Glass)
+    0.08 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+    0.08 s  volume saved 0.30 muted false
+    0.14 s  preview played sound Glass volume 0.80 plays 2 times
+    3.53 s  player finished ok after 3.38s 
+    3.53 s  preview stopped (it ended) after 3.38s
+    3.53 s  volume restored 0.30
+    3.79 s  picked Hero (was Glass)
+    3.80 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+    3.80 s  volume saved 0.30 muted false
+    3.83 s  preview played sound Hero volume 0.80 plays 2 times
+    6.02 s  player finished ok after 2.20s 
+    6.02 s  preview stopped (it ended) after 2.20s
+    6.03 s  volume restored 0.30
+    8.09 s  picked Morse (was Hero)
+    8.10 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+    8.10 s  volume saved 0.30 muted false
+    8.15 s  preview played sound Morse volume 0.80 plays 2 times
+    9.63 s  player finished ok after 1.49s 
+    9.63 s  preview stopped (it ended) after 1.49s
+    9.64 s  volume restored 0.30
+   10.38 s  picked Ping (was Morse)
+   10.40 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+   10.40 s  volume saved 0.30 muted false
+   10.42 s  preview played sound Ping volume 0.80 plays 2 times
+   13.33 s  picked Pop (was Ping)
+   13.33 s  preview stopped (a new one started) after 2.91s
+   13.35 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+   13.35 s  volume kept 0.30
+   13.38 s  preview played sound Pop volume 0.80 plays 2 times
+   15.83 s  picked Purr (was Pop)
+   15.83 s  preview stopped (a new one started) after 2.45s
+   15.84 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+   15.84 s  volume kept 0.30
+   15.87 s  preview played sound Purr volume 0.80 plays 2 times
+   17.47 s  player finished ok after 1.60s 
+   17.47 s  preview stopped (it ended) after 1.60s
+   17.47 s  volume restored 0.30
+   18.00 s  picked Sosumi (was Purr)
+   18.01 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+   18.01 s  volume saved 0.30 muted false
+   18.04 s  preview played sound Sosumi volume 0.80 plays 2 times
+   20.36 s  slider pressed at 0.80
+   21.19 s  player finished ok after 3.15s 
+   21.19 s  preview stopped (it ended) after 3.16s
+   21.19 s  volume restored 0.30
+   21.58 s  slider let go at 0.22
+   21.59 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.22105263
+   21.59 s  volume saved 0.30 muted false
+   21.61 s  preview played sound Sosumi volume 0.22 plays 1 times
+   23.23 s  player finished ok after 1.62s 
+   23.23 s  preview stopped (it ended) after 1.62s
+   23.23 s  volume restored 0.30
+   23.97 s  slider pressed at 0.22
+   24.90 s  slider let go at 0.64
+   24.91 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.6421053
+   24.91 s  volume saved 0.30 muted false
+   24.94 s  preview played sound Sosumi volume 0.64 plays 1 times
+   26.56 s  player finished ok after 1.62s 
+   26.56 s  preview stopped (it ended) after 1.62s
+   26.56 s  volume restored 0.30
+   27.12 s  slider pressed at 0.64
+   27.22 s  slider let go at 0.49
+   27.23 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.49473685
+   27.23 s  volume saved 0.30 muted false
+   27.24 s  preview played sound Sosumi volume 0.49 plays 1 times
+   28.87 s  player finished ok after 1.63s 
+   28.87 s  preview stopped (it ended) after 1.63s
+   28.87 s  volume restored 0.30
+   29.74 s  slider pressed at 0.49
+   30.82 s  slider let go at 0.02
+   30.82 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.021052632
+   30.83 s  volume saved 0.30 muted false
+   30.84 s  preview played sound Sosumi volume 0.02 plays 1 times
+   32.47 s  player finished ok after 1.63s 
+   32.47 s  preview stopped (it ended) after 1.63s
+   32.47 s  volume restored 0.30
+-- the Mac's own volume: 30 before, 30 after
+   saved 9 times, put back 9 times, kept 2 times; 2 sounds replaced another
+OK: one sound replacing another keeps the Mac's own volume, which is put back at the end
+
+== The note next to the sound: why a sound you try stays silent
+Mac muted: true
+clicked at 973.0 358.0
+pressed down
+pressed return
+Mac muted: false
+    0.00 s  picked Hero (was Glass)
+    0.07 s  preview silent-muted sound Hero volume 0.80 plays 2 times
+OK: a sound tried on a muted Mac stays silent, and the note says why
+-- an alarm that rings on a muted Mac: its notification says why it's silent
+    0.00 s  notification ding.FEAB7A02-921F-4020-B677-D4793F523E5B | Water break | No sound: the Mac is muted | 6:21 PM / Next at 6:30 PM
+    0.00 s  ring 6F1C1D2E-0000-4000-8000-000000000001 due 1795458096.78759 sound silent silent-muted
+OK: the notification of a silent ring says "No sound: the Mac is muted"
+-- a long app name in the note
+
+== The Mac's time format: Ding shows times as the Mac does, 24-hour or AM/PM
+OK: blue-options-mac24
+OK: blue-editor-mac24
+Next time on this Mac as it is: '6:30 PM'; with the Mac's 24-hour switch on: '18:30'
+OK: times follow the Mac's format
+
+== Microphone: a call keeps Ding quiet, Siri listening for "Hey Siri" doesn't
+clicked at 973.0 358.0
+pressed down
+pressed return
+clicked at 973.0 358.0
+pressed down
+pressed return
+"corespeechd": recorded 120 buffers in 12 s
+"Recorder": recorded 120 buffers in 12 s
+    0.00 s  picked Hero (was Glass)
+    0.08 s  sound 6F1C1D2E-0000-4000-8000-000000000001 to Apple_Virtual_Sound_Device worn false level 0.8
+    0.08 s  volume saved 0.30 muted false
+    0.14 s  preview played sound Hero volume 0.80 plays 2 times
+    2.34 s  player finished ok after 2.20s 
+    2.34 s  preview stopped (it ended) after 2.20s
+    2.34 s  volume restored 0.30
+   12.23 s  picked Morse (was Hero)
+   12.23 s  preview silent-mic:Recorder sound Morse volume 0.80 plays 2 times
+OK: the sound played while "corespeechd" recorded, and stayed quiet while "Recorder" did
+
+== Missed while asleep: an alarm whose time passes while Ding can't run says so afterwards
+Morning walk is due in 65 s; Ding stands still for 140 s, as if the Mac were asleep...
+    0.00 s  skipped 6F1C1D2E-0000-4000-8000-0000000000C1 due 1795458240.0
+    0.01 s  skipped 6F1C1D2E-0000-4000-8000-0000000000C2 due 1795458180.0
+    0.01 s  missed 6F1C1D2E-0000-4000-8000-0000000000C1 due 1795458240.0
+    0.01 s  notification ding.missed.6F1C1D2E-0000-4000-8000-0000000000C1 | Morning walk |  | Missed at 6:24 PM while your Mac was asleep
+OK: the missed alarm set for a time didn't ring late; a notification says it was missed, and the
+    alarm that rings every minute just carried on
+
+== Snoozed for longer than its gap: an alarm that rings every minute stays quiet until the snooze is up
+A ring is due in 90 s; the alarm is snoozed until 102 s from now...
+    0.00 s  list shown | Next: Water break at 6:27 PM (snoozed)
+   35.42 s  quiet 6F1C1D2E-0000-4000-8000-0000000000D1 due 1795458360.0
+   95.46 s  quiet 6F1C1D2E-0000-4000-8000-0000000000D1 due 1795458420.0
+  107.62 s  sound 6F1C1D2E-0000-4000-8000-0000000000D1 to Apple_Virtual_Sound_Device worn false level 0.3
+  107.62 s  volume saved 0.30 muted false
+  107.70 s  notification ding.9DA0814A-83C9-4BB1-BEC3-1C03A06E327D | Water break |  | 6:27 PM (snoozed) / Next at 6:28 PM
+  107.70 s  ring 6F1C1D2E-0000-4000-8000-0000000000D1 due 1795458432.0 sound played played
+  109.43 s  player finished ok after 1.73s 
+  109.43 s  clear 6F1C1D2E-0000-4000-8000-0000000000D1 ding.9DA0814A-83C9-4BB1-BEC3-1C03A06E327D
+  109.43 s  volume restored 0.30
+  125.17 s  removed ding.9DA0814A-83C9-4BB1-BEC3-1C03A06E327D
+  155.49 s  sound 6F1C1D2E-0000-4000-8000-0000000000D1 to Apple_Virtual_Sound_Device worn false level 0.3
+  155.49 s  volume saved 0.30 muted false
+  155.54 s  notification ding.4175AB3F-98A6-4D72-A247-65EA4656C159 | Water break |  | 6:28 PM / Next at 6:29 PM
+  155.54 s  ring 6F1C1D2E-0000-4000-8000-0000000000D1 due 1795458480.0 sound played played
+  157.27 s  player finished ok after 1.73s 
+  157.27 s  clear 6F1C1D2E-0000-4000-8000-0000000000D1 ding.4175AB3F-98A6-4D72-A247-65EA4656C159
+  157.27 s  volume restored 0.30
+OK: while snoozed, the alarm that rings every minute stayed quiet; it rang when the snooze was up and
+    then carried on as usual, and the list's Next line showed the snooze
+
+== Making Ding.dmg
+created: /Users/runner/work/Ding/Ding/src/out/Ding.dmg
+Checksumming Protective Master Boot Record (MBR : 0)…
+Protective Master Boot Record (MBR :: verified   CRC32 $9E44A891
+Checksumming GPT Header (Primary GPT Header : 1)…
+ GPT Header (Primary GPT Header : 1): verified   CRC32 $BF2BE45D
+Checksumming GPT Partition Data (Primary GPT Table : 2)…
+GPT Partition Data (Primary GPT Tabl: verified   CRC32 $FE694EA0
+Checksumming  (Apple_Free : 3)…
+                    (Apple_Free : 3): verified   CRC32 $00000000
+Checksumming disk image (Apple_APFS : 4)…
+         disk image (Apple_APFS : 4): verified   CRC32 $00AE9B63
+Checksumming  (Apple_Free : 5)…
+                    (Apple_Free : 5): verified   CRC32 $00000000
+Checksumming GPT Partition Data (Backup GPT Table : 6)…
+GPT Partition Data (Backup GPT Table: verified   CRC32 $FE694EA0
+Checksumming GPT Header (Backup GPT Header : 7)…
+  GPT Header (Backup GPT Header : 7): verified   CRC32 $C6AEE0AA
+verified   CRC32 $DAA6D112
+hdiutil: verify: checksum of "/Users/runner/work/Ding/Ding/src/out/Ding.dmg" is VALID
+
+== Making Ding.zip
+/Users/runner/work/Ding/Ding/src/.ci-work/zip-check/Ding.app: valid on disk
+/Users/runner/work/Ding/Ding/src/.ci-work/zip-check/Ding.app: satisfies its Designated Requirement
+OK: unzipped app starts
+total 13576
+drwxr-xr-x  49 runner  staff     1568 Nov 23 18:28 .
+drwxr-xr-x  15 runner  staff      480 Nov 23 18:07 ..
+-rw-r--r--@  1 runner  staff   126625 Nov 23 18:10 arrows-after.png
+-rw-r--r--@  1 runner  staff   125702 Nov 23 18:10 arrows-before.png
+-rw-r--r--@  1 runner  staff   126743 Nov 23 18:10 arrows-time-typed.png
+-rw-r--r--@  1 runner  staff   126602 Nov 23 18:10 arrows-typed.png
+-rw-r--r--@  1 runner  staff   109437 Nov 23 18:11 back-after-escape.png
+-rw-r--r--@  1 runner  staff   109507 Nov 23 18:11 back-after-save.png
+-rw-r--r--@  1 runner  staff   125588 Nov 23 18:11 back-editor-again.png
+-rw-r--r--@  1 runner  staff   141009 Nov 23 18:20 blue-editor-duplicate.png
+-rw-r--r--@  1 runner  staff   142028 Nov 23 18:22 blue-editor-mac24.png
+-rw-r--r--@  1 runner  staff   143004 Nov 23 18:20 blue-editor-missing-sound.png
+-rw-r--r--@  1 runner  staff   142949 Nov 23 18:19 blue-editor.png
+-rw-r--r--@  1 runner  staff   138849 Nov 23 18:22 blue-menu-mac24.png
+-rw-r--r--@  1 runner  staff   140819 Nov 23 18:20 blue-menu-snoozed.png
+-rw-r--r--@  1 runner  staff   139896 Nov 23 18:19 blue-menu.png
+-rw-r--r--@  1 runner  staff   129904 Nov 23 18:19 blue-new.png
+-rw-r--r--@  1 runner  staff   104166 Nov 23 18:22 blue-options-mac24.png
+-rw-r--r--@  1 runner  staff   104251 Nov 23 18:20 blue-options.png
+-rw-r--r--@  1 runner  staff   128339 Nov 23 18:10 click-after.png
+-rw-r--r--@  1 runner  staff   133865 Nov 23 18:10 click-before.png
+-rw-r--r--@  1 runner  staff    81131 Nov 23 18:10 click-saved.png
+-rw-r--r--@  1 runner  staff   134019 Nov 23 18:10 click-typed.png
+-rw-r--r--@  1 runner  staff  1187130 Nov 23 18:28 Ding.dmg
+-rw-r--r--   1 runner  staff   807589 Nov 23 18:28 Ding.zip
+-rw-r--r--@  1 runner  staff   125920 Nov 23 18:08 editor.png
+-rw-r--r--@  1 runner  staff    93007 Nov 23 18:11 empty.png
+-rw-r--r--@  1 runner  staff   108667 Nov 23 18:09 menu-light.png
+-rw-r--r--@  1 runner  staff   115260 Nov 23 18:25 menu-snoozed-every-minute.png
+-rw-r--r--@  1 runner  staff   109421 Nov 23 18:08 menu.png
+-rw-r--r--@  1 runner  staff   145805 Nov 23 18:22 mic-call.png
+-rw-r--r--@  1 runner  staff   142497 Nov 23 18:22 mic-siri-listening.png
+-rw-r--r--@  1 runner  staff   112655 Nov 23 18:08 new-alarm.png
+-rw-r--r--@  1 runner  staff   112640 Nov 23 18:09 new-from-menu.png
+-rw-r--r--@  1 runner  staff    88750 Nov 23 18:09 options.png
+-rw-r--r--@  1 runner  staff     4709 Nov 23 18:10 pointer-every-arrows.png
+-rw-r--r--@  1 runner  staff     4796 Nov 23 18:10 pointer-every-text.png
+-rw-r--r--@  1 runner  staff     5652 Nov 23 18:10 pointer-until-arrows.png
+-rw-r--r--@  1 runner  staff   142914 Nov 23 18:21 preview-after.png
+-rw-r--r--@  1 runner  staff     4621 Nov 23 18:21 preview-log.txt
+-rw-r--r--@  1 runner  staff   142386 Nov 23 18:21 preview-note-gone.png
+-rw-r--r--@  1 runner  staff   146242 Nov 23 18:21 preview-note-long.png
+-rw-r--r--@  1 runner  staff   145079 Nov 23 18:21 preview-note-muted.png
+-rw-r--r--@  1 runner  staff   160298 Nov 23 18:20 preview-popup-open.png
+-rw-r--r--@  1 runner  staff   105636 Nov 23 18:09 reopen.png
+-rw-r--r--@  1 runner  staff     6566 Nov 23 18:19 ring-log.txt
+-rw-r--r--@  1 runner  staff    82447 Nov 23 18:13 ringing.png
+-rw-r--r--@  1 runner  staff   107769 Nov 23 18:09 switch-after.png
+-rw-r--r--   1 runner  staff     6887 Nov 23 18:09 switch.mov
+
+BUILD SUCCEEDED
