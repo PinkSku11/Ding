@@ -208,8 +208,17 @@ python3 ci/click.py click 961 121          # Stop
 sleep 1.5
 screencapture -x "$OUT/timer-stopped.png"
 pkill -x Ding; sleep 1
+open -n "$APP" --args -DingShow menu -DingDark YES -DingRingLog /tmp/ding-timer.log
+sleep 5
+python3 ci/click.py click 971 112; sleep 1       # Custom
+python3 ci/click.py type "8"; sleep 0.3
+for i in 1 2 3 4; do screencapture -x -R 670,130,140,36 "$OUT/timer-caret-$i.png"; sleep 0.2; done
+python3 ci/click.py key return; sleep 1.5        # 8 minutes
+python3 ci/click.py click 795 12; sleep 1.2      # the bell
+python3 ci/click.py click 961 121; sleep 1.2     # Stop
+pkill -x Ding; sleep 1
 
-echo "-- Custom: with another app in front, as when you click the bell"
+echo "-- Custom with another app in front, as when you click the bell"
 open -n "$APP" --args -DingDark YES -DingRingLog /tmp/ding-timer.log
 sleep 4
 open -a Finder; sleep 2
@@ -217,7 +226,8 @@ echo "Front app before: $(front_app)"
 python3 ci/click.py click 795 12; sleep 1.2      # the bell
 python3 ci/click.py click 971 112; sleep 1       # Custom: a row with the minutes box opens under the lengths
 screencapture -x "$OUT/timer-custom.png"
-python3 ci/click.py type "37"; sleep 0.6
+python3 ci/click.py type "37"; sleep 0.3
+for i in 1 2 3 4; do screencapture -x -R 670,130,140,36 "$OUT/timer-caret-front-$i.png"; sleep 0.2; done
 screencapture -x "$OUT/timer-custom-typed.png"
 python3 ci/click.py key return; sleep 1.5        # Return starts it
 CUSTOM_FRONT=$(front_app)
@@ -247,6 +257,7 @@ lines = [line.split(" ", 1)[1].strip() for line in open(sys.argv[1]) if " " in l
 steps = [l.split(" ends ")[0] for l in lines
          if l.startswith(("timer started", "timer stopped", "timer custom"))]
 want = ["timer started 300", "timer stopped",
+        "timer custom", "timer started 480", "timer stopped",
         "timer custom", "timer started 2220", "timer stopped",
         "timer custom", "timer started 720", "timer stopped",
         "timer custom", "timer custom closed", "timer started 300", "timer stopped"]
@@ -257,34 +268,12 @@ if steps != want:
 if any("x" in l for l in typed):
     problems.append(f"a letter went into the box: {typed}")
 if sys.argv[2] != "Finder":
-    problems.append(f"the keyboard didn't go back to Finder, the app in front is {sys.argv[2]!r}")
+    problems.append(f"Ding took the keyboard: the app in front is {sys.argv[2]!r}, not Finder")
 if problems:
     print("FAIL: " + "; ".join(problems)); sys.exit(1)
-print("OK: 5 min and Stop work; Custom with 37 and Return started 37 minutes, 1x2 and Start started 12,")
-print("    a second click on Custom closed the row, and the keyboard went back to Finder")
+print("OK: 5 min and Stop work; Custom with 8 and Return started 8 minutes; with Finder in front, 37 and Return")
+print("    started 37, 1x2 and Start started 12, a second click on Custom closed the row, and Finder kept the keyboard")
 PY2
-
-echo "-- Experiment: the same typing without making Ding the active app"
-rm -f /tmp/ding-noactivate.log
-open -n "$APP" --args -DingDark YES -DingRingLog /tmp/ding-noactivate.log -DingTestNoActivate YES
-sleep 4
-open -a Finder; sleep 2
-python3 ci/click.py click 795 12; sleep 1.2
-python3 ci/click.py click 971 112; sleep 1
-python3 ci/click.py type "45"; sleep 0.6
-screencapture -x "$OUT/timer-noactivate-typed.png"
-python3 ci/click.py key return; sleep 1.5
-echo "Front app after: $(front_app)"
-pkill -x Ding; sleep 1
-clear_timer
-show_log /tmp/ding-noactivate.log
-if grep -q "timer started 2700" /tmp/ding-noactivate.log; then
-    echo "EXPERIMENT: typing and Return reach the box without Ding becoming active"
-elif grep -q "timer typed 45" /tmp/ding-noactivate.log; then
-    echo "EXPERIMENT: typing reaches the box without Ding becoming active, but Return doesn't start it"
-else
-    echo "EXPERIMENT: without Ding becoming active, typing doesn't reach the box"
-fi
 
 echo "-- a 20-second timer rings like an alarm, and a click on the blue bell stops it"
 rm -f /tmp/ding-timer-ring.log

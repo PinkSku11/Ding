@@ -6,7 +6,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var editor: EditorController?
     private var lastAddAction: (() -> Void)?   // the + in the most recent alarm list (used by the build machine's test)
     private weak var timerSection: TimerSectionView?   // the timer row in the open menu, to count down in
-    private var keyboardOwner: NSRunningApplication?   // the app you were in before typing a timer's minutes
     private var countdownTicker: Timer?
     private var shownCountdown = ""
     private var reopenListOpen = false   // the list shown when Ding is opened again is on screen
@@ -124,9 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.reopenListOpen else { return }
             self.reopenListOpen = true
-            let menu = self.buildAlarmMenu()
-            menu.delegate = self   // so the keyboard goes back if Custom took it
-            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+            self.buildAlarmMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
             self.reopenListOpen = false
         }
         return false
@@ -210,30 +207,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if statusItem.menu === menu {
             statusItem.menu = nil
         }
-        if keyboardOwner != nil {
-            // After the click that closed the list has done its work: if it opened the editor, the editor
-            // hands the keyboard back when it closes.
-            DispatchQueue.main.async { DispatchQueue.main.async { [weak self] in self?.handKeyboardBack() } }
-        }
-    }
-
-    /// The list only passes typing to the timer's Custom box while Ding is the active app, so Ding becomes
-    /// active when the box opens.
-    private func takeKeyboard() {
-        guard !NSApp.isActive, !UserDefaults.standard.bool(forKey: "DingTestNoActivate") else { return }
-        if let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
-            keyboardOwner = front
-        }
-        NSApp.activate()
-    }
-
-    /// Back to the app you were using once the list has closed.
-    private func handKeyboardBack() {
-        guard let app = keyboardOwner else { return }
-        keyboardOwner = nil
-        guard NSApp.isActive, !app.isTerminated else { return }
-        app.activate(options: [])
-        RingLog.write("keyboard back to \(app.localizedName ?? "the app before")")
     }
 
     // MARK: Menu
@@ -323,8 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             onStop: { [weak menu] in
                 Engine.shared.stopTimer()
                 menu?.cancelTracking()
-            },
-            onTyping: { [weak self] in self?.takeKeyboard() })
+            })
         item.view = view
         timerSection = view
         return item
@@ -443,10 +415,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         editor = controller
-        if let owner = keyboardOwner {   // Ding became active for the timer's minutes box
-            keyboardOwner = nil
-            controller.previousApp = owner
-        }
         controller.show(anchor: anchor, below: statusItem.button)
     }
 }

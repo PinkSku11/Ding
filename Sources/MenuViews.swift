@@ -223,7 +223,6 @@ final class TimerSectionView: NSView {
     private let timer: DingTimer?
     private let onStart: (TimeInterval) -> Void
     private let onStop: () -> Void
-    private let onTyping: () -> Void                           // the Custom box is about to take the keyboard
     private let title = NSTextField(labelWithString: "Timer")
     private let divider = NSView()
     private let bubble = NSView()
@@ -235,12 +234,10 @@ final class TimerSectionView: NSView {
     private let leftLabel = NSTextField(labelWithString: "")   // "9:42 left"
     private var customOpen = false
 
-    init(timer: DingTimer?, onStart: @escaping (TimeInterval) -> Void, onStop: @escaping () -> Void,
-         onTyping: @escaping () -> Void) {
+    init(timer: DingTimer?, onStart: @escaping (TimeInterval) -> Void, onStop: @escaping () -> Void) {
         self.timer = timer
         self.onStart = onStart
         self.onStop = onStop
-        self.onTyping = onTyping
         let width = MenuMetrics.width
         let height = timer == nil ? TimerSectionView.idleHeight : TimerSectionView.runningHeight
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
@@ -381,8 +378,7 @@ final class TimerSectionView: NSView {
         }
         if customOpen {
             RingLog.write("timer custom")
-            onTyping()
-            box.focus()
+            box.focus()   // what you type goes straight in, even with another app in front
         } else {
             window?.makeFirstResponder(nil)
             RingLog.write("timer custom closed")
@@ -457,15 +453,7 @@ final class MinutesBox: NSView, NSTextFieldDelegate {
     func focus() {
         window?.makeFirstResponder(field)
         field.currentEditor()?.selectAll(nil)
-        logKeyboard("now")
-        // Once more after Ding has had a moment to become the active app. A run-loop timer, because the list is open.
-        let later = Timer(timeInterval: 0.6, repeats: false) { [weak self] _ in self?.logKeyboard("later") }
-        RunLoop.main.add(later, forMode: .common)
-    }
-
-    private func logKeyboard(_ when: String) {
-        let responder = window?.firstResponder.map { String(describing: type(of: $0)) } ?? "none"
-        RingLog.write("keyboard \(when): active \(NSApp.isActive), key window \(window?.isKeyWindow ?? false), typing goes to \(responder)")
+        RingLog.write("timer box ready, Ding \(NSApp.isActive ? "active" : "in the background")")
     }
 
     override func mouseDown(with event: NSEvent) {   // a click on the box around the digits

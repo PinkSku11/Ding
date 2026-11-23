@@ -424,7 +424,7 @@ final class EditorController: NSObject {
     private var opened = false
     /// Open and actually on screen.
     var isOpen: Bool { opened && panel.isVisible }
-    var previousApp: NSRunningApplication?   // the app you were using, to hand the keyboard back to
+    private var previousApp: NSRunningApplication?   // the app you were using, to hand the keyboard back to
     private let model: EditorModel
     private let panel = EditorPanel()
     private var hosting: NSHostingView<EditorView>!
